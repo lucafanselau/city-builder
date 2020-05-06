@@ -4,5 +4,5 @@
 layout(location = 0) out vec4 fragment_color;
 
 void main() {
-    fragment_color = vec4(0.21, 0.87, 0.45, 1.0);
+    fragment_color = vec4(0.21, 0.87, 0.12, 1.0);
 }
