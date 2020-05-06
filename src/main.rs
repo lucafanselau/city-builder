@@ -51,7 +51,6 @@ fn main() {
             },
             Event::MainEventsCleared => {
                 // Updating
-
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {

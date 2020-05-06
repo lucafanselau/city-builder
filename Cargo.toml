@@ -1,5 +1,5 @@
 [package]
-name = "mightycity"
+name = "city-builder"
 version = "0.1.0"
 authors = ["Luca Fanselau <luca.fanselau@outlook.com>"]
 edition = "2018"

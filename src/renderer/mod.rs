@@ -296,6 +296,17 @@ impl<B: Backend> Renderer<B> {
         })
     }
 
+		fn spawn_watcher_thread(&self) {
+
+				// let device = &self.device;
+				// let fence = &self.submission_complete_fences[0];
+				
+				// let handle = std::thread::spawn(move || {
+				// 		device.wait_for_fence(fence, 1_000_000_000);
+				// });
+																			
+		}
+
     /// Should be used to wait before changing the swapchain
     unsafe fn wait_for_fences(&self) -> Result<(), RenderError> {
         use gfx_hal::device::WaitFor;
