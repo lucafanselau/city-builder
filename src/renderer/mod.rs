@@ -1,10 +1,12 @@
 // Here lives our Main Renderer separated into smaller parts, as I see fit
+mod shaders;
+use shaders::Pipeline;
 
 use log::*;
 
 use winit::dpi::PhysicalSize;
 
-use std::{error::Error, mem::ManuallyDrop};
+use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc};
 
 use gfx_hal::{
     device::Device,
@@ -18,42 +20,43 @@ use gfx_hal::{
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
 
-fn compile_shader(
-    glsl: &str,
-    shader_type: shaderc::ShaderKind,
-    shader_name: Option<&str>,
-) -> Result<Vec<u32>, InitError> {
-    use shaderc::*;
-    use std::io::Cursor;
-
-    // for now we will create the compiler inplace
-    // should probably be shared between compilations
-    let mut compiler = Compiler::new().ok_or("failed to create shaderc compiler")?;
-    // let mut options = shaderc::CompileOptions::new().ok_or("failed to create compile options")?;
-    let binary_result: shaderc::CompilationArtifact = compiler.compile_into_spirv(
-        glsl,
-        shader_type,
-        shader_name.unwrap_or("shader.glsl"),
-        "main",
-        None,
-    )?;
-
-    let spirv = gfx_hal::pso::read_spirv(Cursor::new(binary_result.as_binary_u8().to_vec()))?;
-
-    Ok(spirv)
+// This is data, that is not allowed to be destroyed before the frame finished
+#[derive(Debug, Clone)]
+pub struct FrameData<B: Backend> {
+    pipeline: Rc<Pipeline<B>>,
 }
 
 #[derive(Debug)]
-pub struct Renderer<B: Backend> {
+pub struct RenderPass<B: Backend> {
+    render_pass: ManuallyDrop<B::RenderPass>,
+    device: Arc<B::Device>,
+}
+
+impl<B: Backend> Drop for RenderPass<B> {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .destroy_render_pass(ManuallyDrop::take(&mut self.render_pass));
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Renderer<B: Backend>
+where
+    B::Device: Send + Sync,
+{
     instance: B::Instance,
     surface: ManuallyDrop<B::Surface>,
     adapter: gfx_hal::adapter::Adapter<B>,
-    device: B::Device,
+    device: Arc<B::Device>,
     queue_group: QueueGroup<B>,
     surface_format: Format,
-    render_pass: ManuallyDrop<B::RenderPass>,
-    pipeline_layout: ManuallyDrop<B::PipelineLayout>,
-    pipeline: ManuallyDrop<B::GraphicsPipeline>,
+    render_pass: Arc<RenderPass<B>>,
+    shader_system: shaders::ShaderSystem<B>,
+    // pipeline_layout: ManuallyDrop<B::PipelineLayout>,
+    // pipeline: ManuallyDrop<B::GraphicsPipeline>,
+    frame_data: Vec<Option<FrameData<B>>>,
     command_pools: Vec<B::CommandPool>,
     command_buffers: Vec<B::CommandBuffer>,
     submission_complete_fences: Vec<B::Fence>,
@@ -98,7 +101,7 @@ impl<B: Backend> Renderer<B> {
             .expect("couldn't find suitable adapter");
         debug!("Selected: {:?}", adapter.info);
 
-        let (device, queue_group): (B::Device, QueueGroup<B>) = {
+        let (device, queue_group): (Arc<B::Device>, QueueGroup<B>) = {
             // need to find the queue_family
             let queue_family = adapter
                 .queue_families
@@ -117,7 +120,7 @@ impl<B: Backend> Renderer<B> {
                     .expect("failed to open device")
             };
 
-            (B::Device::from(gpu.device), gpu.queue_groups.pop().unwrap())
+            (Arc::new(gpu.device), gpu.queue_groups.pop().unwrap())
         };
 
         let frames_in_flight = 3u8;
@@ -167,7 +170,7 @@ impl<B: Backend> Renderer<B> {
                 .unwrap_or(default_format)
         };
 
-        let render_pass = {
+        let render_pass_raw = {
             use gfx_hal::image::Layout;
             use gfx_hal::pass::*;
 
@@ -194,86 +197,20 @@ impl<B: Backend> Renderer<B> {
             }?
         };
 
-        let pipeline_layout = unsafe {
-            let pipeline_layout = device.create_pipeline_layout(&[], &[])?;
-            Ok::<B::PipelineLayout, InitError>(pipeline_layout)
-        }?;
+        let render_pass = Arc::new(RenderPass {
+            render_pass: ManuallyDrop::new(render_pass_raw),
+            device: device.clone(),
+        });
 
-        let pipeline = unsafe {
-            use gfx_hal::pass::Subpass;
-            use gfx_hal::pso::{
-                BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, GraphicsPipelineDesc,
-                GraphicsShaderSet, Primitive, Rasterizer, Specialization,
-            };
-
-            let vertex_shader = include_str!("../shaders/triangle.vert");
-            let fragment_shader = include_str!("../shaders/triangle.frag");
-
-            let vertex_shader_module = device.create_shader_module(&compile_shader(
-                vertex_shader,
-                shaderc::ShaderKind::Vertex,
-                Some("triangle.vert"),
-            )?)?;
-
-            let fragment_shader_module = device.create_shader_module(&compile_shader(
-                fragment_shader,
-                shaderc::ShaderKind::Fragment,
-                Some("triangle.frag"),
-            )?)?;
-
-            let (vs_entry, fs_entry) = (
-                EntryPoint {
-                    entry: "main",
-                    module: &vertex_shader_module,
-                    specialization: Specialization::default(),
-                },
-                EntryPoint {
-                    entry: "main",
-                    module: &fragment_shader_module,
-                    specialization: Specialization::default(),
-                },
-            );
-
-            let shader_set = GraphicsShaderSet {
-                vertex: vs_entry,
-                hull: None,
-                domain: None,
-                geometry: None,
-                fragment: Some(fs_entry),
-            };
-
-            let mut pipeline_desc = GraphicsPipelineDesc::new(
-                shader_set,
-                Primitive::TriangleList,
-                Rasterizer {
-                    cull_face: Face::BACK,
-                    ..Rasterizer::FILL
-                },
-                &pipeline_layout,
-                Subpass {
-                    index: 0,
-                    main_pass: &render_pass,
-                },
-            );
-
-            pipeline_desc.blender.targets.push(ColorBlendDesc {
-                mask: ColorMask::ALL,
-                blend: Some(BlendState::ALPHA),
-            });
-
-            let pipeline = device.create_graphics_pipeline(&pipeline_desc, None)?;
-
-            device.destroy_shader_module(vertex_shader_module);
-            device.destroy_shader_module(fragment_shader_module);
-
-            Ok::<B::GraphicsPipeline, InitError>(pipeline)
-        }?;
+        let shader_system = shaders::ShaderSystem::new(device.clone(), render_pass.clone());
 
         let physical_size = window.inner_size();
         let surface_extent = Extent2D {
             width: physical_size.width,
             height: physical_size.height,
         };
+
+        let frame_data = vec![None; frames_in_flight as usize];
 
         Ok(Renderer {
             instance,
@@ -282,30 +219,19 @@ impl<B: Backend> Renderer<B> {
             device,
             queue_group,
             surface_format: surface_color_format,
-            render_pass: ManuallyDrop::new(render_pass),
-            pipeline_layout: ManuallyDrop::new(pipeline_layout),
-            pipeline: ManuallyDrop::new(pipeline),
+            render_pass,
+            shader_system,
+            frame_data,
             command_pools,
             command_buffers,
             submission_complete_fences,
             rendering_complete_semaphores,
             frame: 0,
             frames_in_flight,
-            surface_extent,
             should_configure_swapchain: true,
+            surface_extent,
         })
     }
-
-		fn spawn_watcher_thread(&self) {
-
-				// let device = &self.device;
-				// let fence = &self.submission_complete_fences[0];
-				
-				// let handle = std::thread::spawn(move || {
-				// 		device.wait_for_fence(fence, 1_000_000_000);
-				// });
-																			
-		}
 
     /// Should be used to wait before changing the swapchain
     unsafe fn wait_for_fences(&self) -> Result<(), RenderError> {
@@ -328,7 +254,7 @@ impl<B: Backend> Renderer<B> {
             // First lets wait for all the frames
             unsafe {
                 self.wait_for_fences()?;
-								Ok::<(), RenderError>(())
+                Ok::<(), RenderError>(())
             }?;
 
             let caps = self.surface.capabilities(&self.adapter.physical_device);
@@ -384,6 +310,11 @@ impl<B: Backend> Renderer<B> {
             self.device
                 .reset_fence(&self.submission_complete_fences[frame_idx])?;
 
+            // ok so this frame is ready -> We can create a Frame Data Object
+            self.frame_data[frame_idx] = Some(FrameData {
+                pipeline: self.shader_system.get_pipeline(),
+            });
+
             self.command_pools[frame_idx].reset(false);
 
             Ok::<(), RenderError>(())
@@ -409,7 +340,7 @@ impl<B: Backend> Renderer<B> {
             use gfx_hal::image::Extent;
 
             let framebuffer = self.device.create_framebuffer(
-                &self.render_pass,
+                &self.render_pass.render_pass,
                 vec![surface_image.borrow()],
                 Extent {
                     width: self.surface_extent.width,
@@ -448,7 +379,7 @@ impl<B: Backend> Renderer<B> {
             cmd.set_scissors(0, &[viewport.rect]);
 
             cmd.begin_render_pass(
-                &self.render_pass,
+                &self.render_pass.render_pass,
                 &framebuffer,
                 viewport.rect,
                 &[ClearValue {
@@ -459,7 +390,13 @@ impl<B: Backend> Renderer<B> {
                 SubpassContents::Inline,
             );
 
-            cmd.bind_graphics_pipeline(&self.pipeline);
+            cmd.bind_graphics_pipeline(
+                &self.frame_data[frame_idx]
+                    .as_ref()
+                    .unwrap()
+                    .pipeline
+                    .pipeline,
+            );
 
             cmd.draw(0..3, 0..1);
 
@@ -514,13 +451,10 @@ impl<B: Backend> Drop for Renderer<B> {
                 self.device.destroy_fence(fence);
             }
 
-            self.device
-                .destroy_graphics_pipeline(ManuallyDrop::take(&mut self.pipeline));
-            self.device
-                .destroy_pipeline_layout(ManuallyDrop::take(&mut self.pipeline_layout));
-
-            self.device
-                .destroy_render_pass(ManuallyDrop::take(&mut self.render_pass));
+            // self.device
+            //     .destroy_graphics_pipeline(ManuallyDrop::take(&mut self.pipeline));
+            // self.device
+            //     .destroy_pipeline_layout(ManuallyDrop::take(&mut self.pipeline_layout));
 
             for cmd_pool in self.command_pools.drain(..) {
                 self.device.destroy_command_pool(cmd_pool)

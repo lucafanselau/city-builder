@@ -10,12 +10,20 @@ use simplelog;
 use gfx_backend_vulkan as back;
 
 fn main() {
-    simplelog::TermLogger::init(
-        simplelog::LevelFilter::max(),
-        simplelog::Config::default(),
-        simplelog::TerminalMode::Mixed,
-    )
-    .unwrap();
+    let _logger = {
+				use simplelog::{ ConfigBuilder, TermLogger, TerminalMode };
+				
+        let config = ConfigBuilder::new()
+            .set_location_level(LevelFilter::Warn)
+						.build();
+
+        TermLogger::init(
+            LevelFilter::max(),
+            config,
+            TerminalMode::Mixed,
+        )
+        .unwrap()
+    };
 
     let window_size = winit::dpi::LogicalSize::new(1600, 900);
 
