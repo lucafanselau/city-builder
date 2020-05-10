@@ -1,12 +1,15 @@
 // Here lives our Main Renderer separated into smaller parts, as I see fit
 mod shaders;
 use shaders::Pipeline;
+mod vertex;
 
 use log::*;
 
 use winit::dpi::PhysicalSize;
 
-use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc};
+use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
+
+use nalgebra_glm as glm;
 
 use gfx_hal::{
     device::Device,
@@ -41,6 +44,22 @@ impl<B: Backend> Drop for RenderPass<B> {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct PushConstants {
+    // transform: [[f32; 4]; 4],
+    transform: glm::Mat4,
+    // view_projection: [[f32; 4]; 4],
+    view_projection: glm::Mat4,
+}
+
+unsafe fn push_constant_bytes<T>(push_constants: &T) -> &[u32] {
+    let size_in_bytes = std::mem::size_of::<T>();
+    let size_in_u32s = size_in_bytes / std::mem::size_of::<u32>();
+    let start_ptr = push_constants as *const T as *const u32;
+    std::slice::from_raw_parts(start_ptr, size_in_u32s)
+}
+
 #[derive(Debug)]
 pub struct Renderer<B: Backend>
 where
@@ -65,6 +84,12 @@ where
     frames_in_flight: u8,
     should_configure_swapchain: bool,
     surface_extent: Extent2D,
+    mesh: vertex::Mesh<B>,
+
+    // Depth Ressources
+    depth_image: Option<B::Image>,
+    depth_image_memory: Option<B::Memory>,
+    depth_image_view: Option<B::ImageView>,
 }
 
 impl<B: Backend> Renderer<B> {
@@ -182,17 +207,30 @@ impl<B: Backend> Renderer<B> {
                 layouts: Layout::Undefined..Layout::Present,
             };
 
+            let depth_format = get_depth_format(&adapter);
+            info!("Depth Format is: {:#?}", depth_format);
+            let depth_attachment = Attachment {
+                format: Some(depth_format),
+                samples: 1,
+                ops: AttachmentOps::new(AttachmentLoadOp::Clear, AttachmentStoreOp::DontCare),
+                stencil_ops: AttachmentOps::DONT_CARE,
+                layouts: Layout::Undefined..Layout::DepthStencilAttachmentOptimal,
+            };
+
             let subpass = SubpassDesc {
                 colors: &[(0, Layout::ColorAttachmentOptimal)],
-                depth_stencil: None,
+                depth_stencil: Some(&(1, Layout::DepthStencilAttachmentOptimal)),
                 inputs: &[],
                 resolves: &[],
                 preserves: &[],
             };
 
             unsafe {
-                let render_pass =
-                    device.create_render_pass(&[color_attachment], &[subpass], &[])?;
+                let render_pass = device.create_render_pass(
+                    &[color_attachment, depth_attachment],
+                    &[subpass],
+                    &[],
+                )?;
                 Ok::<B::RenderPass, InitError>(render_pass)
             }?
         };
@@ -212,6 +250,9 @@ impl<B: Backend> Renderer<B> {
 
         let frame_data = vec![None; frames_in_flight as usize];
 
+        // load the model
+        let mesh = vertex::create_mesh(device.clone(), &adapter)?;
+
         Ok(Renderer {
             instance,
             surface: ManuallyDrop::new(surface),
@@ -230,6 +271,10 @@ impl<B: Backend> Renderer<B> {
             frames_in_flight,
             should_configure_swapchain: true,
             surface_extent,
+            mesh,
+            depth_image: None,
+            depth_image_memory: None,
+            depth_image_view: None,
         })
     }
 
@@ -245,6 +290,76 @@ impl<B: Backend> Renderer<B> {
         )?;
 
         Ok(())
+    }
+
+    unsafe fn create_depth_image(&mut self) -> Result<(), RenderError> {
+        use gfx_hal::{
+            adapter::PhysicalDevice,
+            format::{Aspects, Swizzle},
+            image::{Kind, SubresourceRange, Tiling, Usage, ViewCapabilities, ViewKind},
+            memory::Properties,
+            MemoryTypeId,
+        };
+
+        let format = get_depth_format(&self.adapter);
+
+        let kind = Kind::D2(self.surface_extent.width, self.surface_extent.height, 1, 1);
+
+        let mut image = self.device.create_image(
+            kind,
+            1,
+            format,
+            Tiling::Optimal,
+            Usage::DEPTH_STENCIL_ATTACHMENT,
+            ViewCapabilities::empty(),
+        )?;
+
+        let requirements = self.device.get_image_requirements(&image);
+
+        let memory_types = self
+            .adapter
+            .physical_device
+            .memory_properties()
+            .memory_types;
+
+        let memory_type = memory_types
+            .iter()
+            .enumerate()
+            .find(|(id, mem_type)| {
+                let type_supported = requirements.type_mask & (1_u64 << id) != 0;
+                type_supported && mem_type.properties.contains(Properties::DEVICE_LOCAL)
+            })
+            .map(|(id, _ty)| MemoryTypeId(id))
+            .expect("did not find memory type");
+
+        let image_memory = self
+            .device
+            .allocate_memory(memory_type, requirements.size)?;
+
+        {
+            self.device
+                .bind_image_memory(&image_memory, 0, &mut image)?;
+        }
+
+        // Create Image View
+        let image_view = self.device.create_image_view(
+            &image,
+            ViewKind::D2,
+            format,
+            Swizzle::NO,
+            SubresourceRange {
+                aspects: Aspects::DEPTH,
+                levels: 0..1,
+                layers: 0..1,
+            },
+        )?;
+
+        // Now we can set the fields
+        self.depth_image = Some(image);
+        self.depth_image_memory = Some(image_memory);
+        self.depth_image_view = Some(image_view);
+
+        Ok::<(), RenderError>(())
     }
 
     fn configure_swapchain(&mut self) -> Result<(), RenderError> {
@@ -274,6 +389,11 @@ impl<B: Backend> Renderer<B> {
                 Ok::<(), RenderError>(())
             }?;
 
+            unsafe {
+                self.create_depth_image()?;
+                Ok::<(), RenderError>(())
+            }?;
+
             self.should_configure_swapchain = false;
         }
 
@@ -289,7 +409,7 @@ impl<B: Backend> Renderer<B> {
         self.should_configure_swapchain = true;
     }
 
-    pub fn render(&mut self) -> Result<(), RenderError> {
+    pub fn render(&mut self, start_time: &Instant) -> Result<(), RenderError> {
         // The index for the in flight ressources
         let frame_idx: usize = self.frame as usize % self.frames_in_flight as usize;
 
@@ -341,7 +461,12 @@ impl<B: Backend> Renderer<B> {
 
             let framebuffer = self.device.create_framebuffer(
                 &self.render_pass.render_pass,
-                vec![surface_image.borrow()],
+                vec![
+                    surface_image.borrow(),
+                    self.depth_image_view
+                        .as_ref()
+                        .expect("depth image view missing"),
+                ],
                 Extent {
                     width: self.surface_extent.width,
                     height: self.surface_extent.height,
@@ -366,15 +491,35 @@ impl<B: Backend> Renderer<B> {
             }
         };
 
+        let angle = start_time.elapsed().as_secs_f32();
+
+        let teapots = {
+            let view_matrix = glm::look_at_rh(
+                &glm::vec3(1., -2., 1.),
+                &glm::vec3(0., 0., 0.),
+                &glm::vec3(0., 1., 0.),
+            );
+            let aspect = self.surface_extent.width as f32 / self.surface_extent.height as f32;
+            let projection_matrix = glm::perspective_zo(aspect, f32::to_radians(50.0), 0.1, 100.0);
+
+            let transform = glm::rotate(&glm::Mat4::identity(), angle, &glm::vec3(0., 1., 0.));
+
+            &[PushConstants {
+                transform,
+                view_projection: projection_matrix * view_matrix,
+            }]
+        };
+
         unsafe {
             use gfx_hal::command::{
-                ClearColor, ClearValue, CommandBuffer, CommandBufferFlags, SubpassContents,
+                ClearColor, ClearDepthStencil, ClearValue, CommandBuffer, CommandBufferFlags,
+                SubpassContents,
             };
 
             let cmd: &mut B::CommandBuffer = &mut self.command_buffers[frame_idx];
 
             cmd.begin_primary(CommandBufferFlags::ONE_TIME_SUBMIT);
-
+						
             cmd.set_viewports(0, &[viewport.clone()]);
             cmd.set_scissors(0, &[viewport.rect]);
 
@@ -382,11 +527,19 @@ impl<B: Backend> Renderer<B> {
                 &self.render_pass.render_pass,
                 &framebuffer,
                 viewport.rect,
-                &[ClearValue {
-                    color: ClearColor {
-                        float32: [0.0, 0.0, 0.0, 1.0],
+                &[
+                    ClearValue {
+                        color: ClearColor {
+                            float32: [0.0, 0.0, 0.0, 1.0],
+                        },
                     },
-                }],
+                    ClearValue {
+                        depth_stencil: ClearDepthStencil {
+                            depth: 1.,
+                            stencil: 0,
+                        },
+                    },
+                ],
                 SubpassContents::Inline,
             );
 
@@ -398,7 +551,30 @@ impl<B: Backend> Renderer<B> {
                     .pipeline,
             );
 
-            cmd.draw(0..3, 0..1);
+            cmd.bind_vertex_buffers(
+                0,
+                vec![(
+                    &self.mesh.vertex_buffer as &B::Buffer,
+                    gfx_hal::buffer::SubRange::WHOLE,
+                )],
+            );
+
+            for teapot in teapots {
+                use gfx_hal::pso::ShaderStageFlags;
+
+                cmd.push_graphics_constants(
+                    &self.frame_data[frame_idx]
+                        .as_ref()
+                        .unwrap()
+                        .pipeline
+                        .pipeline_layout,
+                    ShaderStageFlags::VERTEX,
+                    0,
+                    push_constant_bytes(teapot),
+                );
+
+                cmd.draw(0..self.mesh.vertex_length, 0..1);
+            }
 
             cmd.end_render_pass();
             cmd.finish();
@@ -460,9 +636,62 @@ impl<B: Backend> Drop for Renderer<B> {
                 self.device.destroy_command_pool(cmd_pool)
             }
 
+            // Destroy Depth Fields
+            if let Some(image) = self.depth_image.take() {
+                self.device.destroy_image(image);
+            }
+
+            if let Some(image_view) = self.depth_image_view.take() {
+                self.device.destroy_image_view(image_view);
+            }
+
+            if let Some(image_memory) = self.depth_image_memory.take() {
+                self.device.free_memory(image_memory);
+            }
+
             self.surface.unconfigure_swapchain(&self.device);
             self.instance
                 .destroy_surface(ManuallyDrop::take(&mut self.surface));
         }
     }
+}
+
+/// UTILITY FUNCTIONS
+fn get_depth_format<B: Backend>(adapter: &gfx_hal::adapter::Adapter<B>) -> gfx_hal::format::Format {
+    use gfx_hal::{adapter::PhysicalDevice, format::ImageFeature, image::Tiling};
+
+    let candidates = [
+        Format::D32Sfloat,
+        Format::D32SfloatS8Uint,
+        Format::D24UnormS8Uint,
+    ];
+
+    let tiling = Tiling::Optimal;
+
+    let image_features = ImageFeature::DEPTH_STENCIL_ATTACHMENT;
+
+    let mut result_format = None;
+
+    'search_loop: for candidate in &candidates {
+        let properties = adapter
+            .physical_device
+            .format_properties(Some(candidate.clone()));
+
+        match tiling {
+            Tiling::Optimal => {
+                if (properties.optimal_tiling & image_features) == image_features {
+                    result_format = Some(candidate.clone());
+                    break 'search_loop;
+                }
+            }
+            Tiling::Linear => {
+                if (properties.linear_tiling & image_features) == image_features {
+                    result_format = Some(candidate.clone());
+                    break 'search_loop;
+                }
+            }
+        }
+    }
+
+    result_format.expect("failed to find format")
 }
