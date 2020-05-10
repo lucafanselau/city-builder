@@ -16,3 +16,6 @@ gfx-backend-vulkan = "0.5"
 arrayvec = "0.5.1"
 shaderc = "0.6.2"
 notify = "4.0.15"
+serde = { version = "1.0.110", features = ["derive"] }
+bincode = "1.2.1"
+nalgebra-glm = "0.7.0"

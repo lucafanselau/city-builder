@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use log::*;
 
-use std::fmt;
+// use std::fmt;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::error::Error;
@@ -16,7 +16,8 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::renderer::RenderPass;
+use crate::renderer::vertex;
+use crate::renderer::{PushConstants, RenderPass};
 
 #[derive(Debug)]
 pub struct Pipeline<B: Backend> {
@@ -36,20 +37,13 @@ impl<B: Backend> Drop for Pipeline<B> {
     }
 }
 
+#[derive(Debug)]
 pub struct ShaderSystem<B: Backend> {
     device: Arc<B::Device>,
     running: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
     rx: Receiver<Pipeline<B>>,
     pipeline: Rc<Pipeline<B>>,
-}
-
-impl<B: Backend> fmt::Debug for ShaderSystem<B> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Point")
-            .field("device", &self.device)
-            .finish()
-    }
 }
 
 fn compile_shader(
@@ -82,15 +76,20 @@ fn build_pipeline<B: Backend>(
     render_pass: &Arc<RenderPass<B>>,
 ) -> Result<Pipeline<B>, Box<dyn Error>> {
     let pipeline_layout = unsafe {
-        let pipeline_layout = device.create_pipeline_layout(&[], &[])?;
+        use gfx_hal::pso::ShaderStageFlags;
+
+        let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
+
+        let pipeline_layout = device
+            .create_pipeline_layout(&[], &[(ShaderStageFlags::VERTEX, 0..push_constant_bytes)])?;
         Ok::<B::PipelineLayout, Box<dyn Error>>(pipeline_layout)
     }?;
 
     let pipeline = unsafe {
         use gfx_hal::pass::Subpass;
         use gfx_hal::pso::{
-            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, GraphicsPipelineDesc,
-            GraphicsShaderSet, Primitive, Rasterizer, Specialization,
+            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, FrontFace,
+            GraphicsPipelineDesc, GraphicsShaderSet, Primitive, Rasterizer, Specialization,
         };
 
         // let vertex_shader = include_str!("../../assets/shaders/triangle.vert");
@@ -143,6 +142,7 @@ fn build_pipeline<B: Backend>(
             Primitive::TriangleList,
             Rasterizer {
                 cull_face: Face::BACK,
+                front_face: FrontFace::Clockwise,
                 ..Rasterizer::FILL
             },
             &pipeline_layout,
@@ -156,6 +156,50 @@ fn build_pipeline<B: Backend>(
             mask: ColorMask::ALL,
             blend: Some(BlendState::ALPHA),
         });
+
+        // Vertex Buffer description
+        {
+            use gfx_hal::format::Format;
+            use gfx_hal::pso::{AttributeDesc, Element, VertexBufferDesc, VertexInputRate};
+
+            pipeline_desc.vertex_buffers.push(VertexBufferDesc {
+                binding: 0,
+                stride: std::mem::size_of::<vertex::Vertex>() as u32,
+                rate: VertexInputRate::Vertex,
+            });
+
+            pipeline_desc.attributes.push(AttributeDesc {
+                location: 0,
+                binding: 0,
+                element: Element {
+                    format: Format::Rgb32Sfloat,
+                    offset: 0,
+                },
+            });
+
+            pipeline_desc.attributes.push(AttributeDesc {
+                location: 1,
+                binding: 0,
+                element: Element {
+                    format: Format::Rgb32Sfloat,
+                    offset: 12, // Hardcode!
+                },
+            });
+        }
+
+        // Depth Stencil
+        {
+            use gfx_hal::pso::{Comparison, DepthTest};
+
+            pipeline_desc.depth_stencil.depth = Some(DepthTest {
+                fun: Comparison::Less,
+                write: true,
+            });
+
+            pipeline_desc.depth_stencil.depth_bounds = false;
+            // Maybe that is the default... Who knows
+            pipeline_desc.depth_stencil.stencil = None;
+        }
 
         let pipeline = device.create_graphics_pipeline(&pipeline_desc, None)?;
 
@@ -194,7 +238,7 @@ impl<B: Backend> ShaderSystem<B> {
                 // Automatically select the best implementation for your platform.
                 // You can also access each implementation directly e.g. INotifyWatcher.
                 let mut watcher: RecommendedWatcher =
-                    Watcher::new(notify_tx, Duration::from_secs(2))
+                    Watcher::new(notify_tx, Duration::from_secs(1))
                         .expect("failed to create file watcher");
 
                 // Add a path to be watched. All files and directories at that path and

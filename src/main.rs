@@ -39,6 +39,8 @@ fn main() {
         }
     };
 
+		let start_time = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
         // dispatched any events. This is ideal for games and similar applications.
@@ -63,7 +65,7 @@ fn main() {
             }
             Event::RedrawRequested(_) => {
                 // Here happens rendering
-                match r.render() {
+                match r.render(&start_time) {
                     Ok(_) => (),
                     Err(e) => {
                         error!("Renderer: Rendering Failed");
