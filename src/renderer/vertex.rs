@@ -35,7 +35,12 @@ pub type MeshError = Box<dyn Error>;
 pub fn load_teapot() -> Result<Vec<Vertex>, MeshError> {
     let binary_mesh_data = include_bytes!("../../assets/meshes/teapot_mesh.bin");
 
-    Ok(deserialize(binary_mesh_data).expect("failed to load teapot"))
+		let mut mesh: Vec<Vertex> = deserialize(binary_mesh_data)?;
+		for vertex in mesh.iter_mut() {
+				vertex.position[1] *= -1.;
+		}
+		
+    Ok(mesh)
 }
 
 unsafe fn make_buffer<B: gfx_hal::Backend>(

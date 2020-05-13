@@ -19,3 +19,9 @@ notify = "4.0.15"
 serde = { version = "1.0.110", features = ["derive"] }
 bincode = "1.2.1"
 nalgebra-glm = "0.7.0"
+
+# IMGUI Shiiiit
+# imgui = "0.3.0"
+# imgui_winit_support= "0.3.1"
+# pbly never going to use this:
+# imgui_gfx_hal = "0.1.2"

@@ -20,6 +20,8 @@ use gfx_hal::{
     Backend, Instance,
 };
 
+use crate::camera;
+
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
 
@@ -409,7 +411,7 @@ impl<B: Backend> Renderer<B> {
         self.should_configure_swapchain = true;
     }
 
-    pub fn render(&mut self, start_time: &Instant) -> Result<(), RenderError> {
+    pub fn render(&mut self, start_time: &Instant, camera: &camera::Camera) -> Result<(), RenderError> {
         // The index for the in flight ressources
         let frame_idx: usize = self.frame as usize % self.frames_in_flight as usize;
 
@@ -494,19 +496,11 @@ impl<B: Backend> Renderer<B> {
         let angle = start_time.elapsed().as_secs_f32();
 
         let teapots = {
-            let view_matrix = glm::look_at_rh(
-                &glm::vec3(1., -2., 1.),
-                &glm::vec3(0., 0., 0.),
-                &glm::vec3(0., 1., 0.),
-            );
-            let aspect = self.surface_extent.width as f32 / self.surface_extent.height as f32;
-            let projection_matrix = glm::perspective_zo(aspect, f32::to_radians(50.0), 0.1, 100.0);
-
             let transform = glm::rotate(&glm::Mat4::identity(), angle, &glm::vec3(0., 1., 0.));
 
             &[PushConstants {
                 transform,
-                view_projection: projection_matrix * view_matrix,
+                view_projection: camera.data.expect("You need to call camera.update(dt)"),
             }]
         };
 

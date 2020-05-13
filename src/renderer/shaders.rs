@@ -142,7 +142,6 @@ fn build_pipeline<B: Backend>(
             Primitive::TriangleList,
             Rasterizer {
                 cull_face: Face::BACK,
-                front_face: FrontFace::Clockwise,
                 ..Rasterizer::FILL
             },
             &pipeline_layout,
