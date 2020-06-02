@@ -2,7 +2,7 @@ mod camera;
 mod renderer;
 mod window;
 
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, ElementState, VirtualKeyCode};
 use winit::event_loop::ControlFlow;
 
 use log::*;
@@ -13,7 +13,7 @@ use camera::Camera;
 use gfx_backend_vulkan as back;
 
 fn main() {
-    let _logger = {
+		let _logger = {
         use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
 
         let config = ConfigBuilder::new()
@@ -61,7 +61,17 @@ fn main() {
                         info!("The close button was pressed; stopping");
                     }
                     WindowEvent::Resized(dims) => r.handle_resize(dims),
-
+										WindowEvent::KeyboardInput{ input, .. } => {
+												if input.state == ElementState::Pressed {
+														if let Some(key_code) = input.virtual_keycode {
+																if key_code == VirtualKeyCode::Escape {
+																		// exit application
+																		*control_flow = ControlFlow::Exit;
+																		info!("Escape was pressed, closing now!");
+																}
+														}
+												}
+										},
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         r.handle_resize(*new_inner_size)
                     }
