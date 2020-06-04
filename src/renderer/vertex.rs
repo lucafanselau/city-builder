@@ -1,7 +1,6 @@
 use bincode::deserialize;
 use gfx_hal;
 use gfx_hal::device::Device;
-use serde::Deserialize;
 use std::{error::Error, mem::ManuallyDrop, sync::Arc};
 
 #[derive(serde::Deserialize)]
@@ -35,11 +34,11 @@ pub type MeshError = Box<dyn Error>;
 pub fn load_teapot() -> Result<Vec<Vertex>, MeshError> {
     let binary_mesh_data = include_bytes!("../../assets/meshes/teapot_mesh.bin");
 
-		let mut mesh: Vec<Vertex> = deserialize(binary_mesh_data)?;
-		for vertex in mesh.iter_mut() {
-				vertex.position[1] *= -1.;
-		}
-		
+    let mut mesh: Vec<Vertex> = deserialize(binary_mesh_data)?;
+    for vertex in mesh.iter_mut() {
+        vertex.position[1] *= -1.;
+    }
+
     Ok(mesh)
 }
 
@@ -105,7 +104,11 @@ pub fn create_mesh<B: gfx_hal::Backend>(
             .map_memory(&vertex_buffer_memory, Segment::ALL)
             .expect("TODO");
 
-        std::ptr::copy_nonoverlapping(teapot.as_ptr() as *const u8, mapped_memory, vertex_buffer_len);
+        std::ptr::copy_nonoverlapping(
+            teapot.as_ptr() as *const u8,
+            mapped_memory,
+            vertex_buffer_len,
+        );
 
         device
             .flush_mapped_memory_ranges(vec![(&vertex_buffer_memory, Segment::ALL)])

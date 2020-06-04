@@ -1,23 +1,24 @@
-/// This module will provide the pipeline and will check to recompiler after the file changed.
-use gfx_hal::{device::Device, Backend};
-use std::sync::Arc;
-
-use log::*;
-
-// use std::fmt;
-
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::mem::ManuallyDrop;
+use std::ops::Range;
 use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::renderer::vertex;
-use crate::renderer::{PushConstants, RenderPass};
+/// This module will provide the pipeline and will check to recompiler after the file changed.
+use gfx_hal::{Backend, device::Device, pso};
+use gfx_hal::pso::{AttributeDesc, VertexBufferDesc};
+use log::*;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+use crate::renderer::RenderPass;
+
+// use std::fmt;
 
 #[derive(Debug)]
 pub struct Pipeline<B: Backend> {
@@ -37,13 +38,27 @@ impl<B: Backend> Drop for Pipeline<B> {
     }
 }
 
-#[derive(Debug)]
-pub struct ShaderSystem<B: Backend> {
-    device: Arc<B::Device>,
-    running: Arc<AtomicBool>,
-    handle: Option<JoinHandle<()>>,
-    rx: Receiver<Pipeline<B>>,
-    pipeline: Rc<Pipeline<B>>,
+#[derive(Debug, Clone)]
+pub struct ConstructData {
+    vertex_file: String,
+    fragment_file: String,
+    vertex_buffers: Vec<VertexBufferDesc>,
+    attributes: Vec<AttributeDesc>,
+    push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>,
+}
+
+impl ConstructData {
+    pub fn new(vertex_file: String, fragment_file: String, vertex_buffers: Vec<VertexBufferDesc>,
+               attributes: Vec<AttributeDesc>,
+               push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>) -> Self {
+        ConstructData {
+            vertex_file,
+            fragment_file,
+            vertex_buffers,
+            attributes,
+            push_constants,
+        }
+    }
 }
 
 fn compile_shader(
@@ -74,21 +89,23 @@ fn compile_shader(
 fn build_pipeline<B: Backend>(
     device: &Arc<B::Device>,
     render_pass: &Arc<RenderPass<B>>,
+    data: ConstructData,
 ) -> Result<Pipeline<B>, Box<dyn Error>> {
     let pipeline_layout = unsafe {
-        use gfx_hal::pso::ShaderStageFlags;
+        // let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
 
-        let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
+        // let pipeline_layout = device
+        //     .create_pipeline_layout(&[], &)?;
 
-        let pipeline_layout = device
-            .create_pipeline_layout(&[], &[(ShaderStageFlags::VERTEX, 0..push_constant_bytes)])?;
+        let pipeline_layout = device.create_pipeline_layout(&[], &data.push_constants)?;
+
         Ok::<B::PipelineLayout, Box<dyn Error>>(pipeline_layout)
     }?;
 
     let pipeline = unsafe {
         use gfx_hal::pass::Subpass;
         use gfx_hal::pso::{
-            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, FrontFace,
+            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face,
             GraphicsPipelineDesc, GraphicsShaderSet, Primitive, Rasterizer, Specialization,
         };
 
@@ -99,19 +116,19 @@ fn build_pipeline<B: Backend>(
         let path = std::env::current_dir()?;
         println!("The current directory is {}", path.display());
 
-        let vertex_shader = fs::read_to_string("assets/shaders/triangle.vert")?;
-        let fragment_shader = fs::read_to_string("assets/shaders/triangle.frag")?;
+        let vertex_shader = fs::read_to_string(format!("assets/shaders/{}", data.vertex_file))?;
+        let fragment_shader = fs::read_to_string(format!("assets/shaders/{}", data.fragment_file))?;
 
         let vertex_shader_module = device.create_shader_module(&compile_shader(
             vertex_shader,
             shaderc::ShaderKind::Vertex,
-            Some("triangle.vert"),
+            Some(data.vertex_file.as_str()),
         )?)?;
 
         let fragment_shader_module = device.create_shader_module(&compile_shader(
             fragment_shader,
             shaderc::ShaderKind::Fragment,
-            Some("triangle.frag"),
+            Some(data.fragment_file.as_str()),
         )?)?;
 
         let (vs_entry, fs_entry) = (
@@ -158,32 +175,8 @@ fn build_pipeline<B: Backend>(
 
         // Vertex Buffer description
         {
-            use gfx_hal::format::Format;
-            use gfx_hal::pso::{AttributeDesc, Element, VertexBufferDesc, VertexInputRate};
-
-            pipeline_desc.vertex_buffers.push(VertexBufferDesc {
-                binding: 0,
-                stride: std::mem::size_of::<vertex::Vertex>() as u32,
-                rate: VertexInputRate::Vertex,
-            });
-
-            pipeline_desc.attributes.push(AttributeDesc {
-                location: 0,
-                binding: 0,
-                element: Element {
-                    format: Format::Rgb32Sfloat,
-                    offset: 0,
-                },
-            });
-
-            pipeline_desc.attributes.push(AttributeDesc {
-                location: 1,
-                binding: 0,
-                element: Element {
-                    format: Format::Rgb32Sfloat,
-                    offset: 12, // Hardcode!
-                },
-            });
+            pipeline_desc.vertex_buffers = data.vertex_buffers;
+            pipeline_desc.attributes = data.attributes;
         }
 
         // Depth Stencil
@@ -215,20 +208,32 @@ fn build_pipeline<B: Backend>(
     })
 }
 
+#[derive(Debug)]
+pub struct ShaderSystem<B: Backend> {
+    device: Arc<B::Device>,
+    running: Arc<AtomicBool>,
+    handle: Option<JoinHandle<()>>,
+    rx: Receiver<(String, Pipeline<B>)>,
+    store: HashMap<String, Rc<Pipeline<B>>>,
+    /// Instructions to build the Pipeline
+    blueprints: Arc<RwLock<HashMap<String, ConstructData>>>,
+    /// Just used to build the first pipeline when add pipeline is called
+    render_pass: Arc<RenderPass<B>>
+}
+
 impl<B: Backend> ShaderSystem<B> {
     pub fn new(device: Arc<B::Device>, render_pass: Arc<RenderPass<B>>) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         // this will be the channel for the newly created pipelines
         let (tx, rx) = channel();
 
-        // Construct the first pipeline
-        let pipeline = Rc::new(
-            build_pipeline(&device, &render_pass).expect("failed to create inital pipeline"),
-        );
+        let blueprints = Arc::new(RwLock::new(HashMap::<String, ConstructData>::new()));
 
         let handle = {
             let running = running.clone();
             let device = device.clone();
+            let render_pass = render_pass.clone();
+            let blueprints = blueprints.clone();
             std::thread::spawn(move || {
                 // This is our construction thread
                 // First we will start a file watcher
@@ -254,30 +259,38 @@ impl<B: Backend> ShaderSystem<B> {
 
                     use notify::DebouncedEvent::*;
                     match notify_rx.try_recv() {
-                        Ok(event) => match event {
-                            Write(path) => {
-                                info!("got write to path: {:#?}", path);
-                                if let Some(file_name_os) = path.file_name() {
-                                    if let Some(file_name) = file_name_os.to_str() {
-                                        info!("file_name was {}", file_name);
-                                        if file_name == "triangle.frag"
-                                            || file_name == "triangle.vert"
-                                        {
-                                            // -> we need to rebuilt the pipeline
-                                            if let Ok(pipeline) =
-                                                build_pipeline(&device, &render_pass)
-                                            {
-                                                info!("rebuild pipeline!");
-                                                tx.send(pipeline);
-                                            } else {
-                                                error!("failed to rebuild pipeline");
+                        Ok(event) => {
+                            match event {
+                                Write(path) => {
+                                    info!("got write to path: {:#?}", path);
+                                    if let Some(file_name_os) = path.file_name() {
+                                        if let Some(file_name) = file_name_os.to_str() {
+                                            let file_name = String::from(file_name);
+                                            info!("file_name was {}", file_name);
+                                            // Search for file name in the store
+                                            let found = {
+                                                blueprints.read().expect("shader_thread: failed to acquire read lock").iter().find(|(_, data)| {
+                                                    data.vertex_file == file_name || data.fragment_file == file_name
+                                                }).map(|(name, data)| (name.clone(), data.clone()))
+                                            };
+
+                                            if let Some((name, data)) = found {
+                                                // -> we need to rebuilt the pipeline
+                                                if let Ok(pipeline) =
+                                                build_pipeline(&device, &render_pass, data)
+                                                {
+                                                    info!("rebuild pipeline!");
+                                                    tx.send((name.clone(), pipeline)).expect("failed to send new pipeline");
+                                                } else {
+                                                    error!("failed to rebuild pipeline");
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                _ => (),
                             }
-                            _ => (),
-                        },
+                        }
                         Err(e) => {
                             match e {
                                 // We will wait for an event
@@ -297,45 +310,51 @@ impl<B: Backend> ShaderSystem<B> {
             })
         };
 
-        // test for notify
-        // use notify::{RecursiveMode, Watcher};
-        // Automatically select the best implementation for your platform.
-        // let watcherDevice = device.clone();
-        // let mut watcher: RecommendedWatcher = Watcher::new_immediate(move |res| {
-        // 		error!("happened");
-        //     // let device = device.clone();
-        // 		use gfx_hal::device::Device;
-
-        //     match res {
-        //         Ok(event) => println!("event: {:?}", event),
-        //         Err(e) => println!("watch error: {:?}", e),
-        //     };
-        // })
-        // .expect("");
-
-        // // Add a path to be watched. All files and directories at that path and
-        // // below will be monitored for changes.
-        // watcher
-        //     .watch("src/shaders", RecursiveMode::Recursive)
-        //     .expect("");
-
         Self {
             device,
             running,
             handle: Some(handle),
-            rx: rx,
-            pipeline: pipeline,
+            rx,
+            store: HashMap::new(),
+            blueprints,
+            render_pass
         }
     }
 
-    pub fn get_pipeline(&mut self) -> Rc<Pipeline<B>> {
-        // check if we got a new one
-        match self.rx.try_recv() {
-            Ok(pipeline) => self.pipeline = Rc::new(pipeline),
-            _ => (),
-        };
+    pub fn add_pipeline(&mut self, name: String, data: ConstructData) {
+        // Construct the first pipeline
+        let pipeline = Rc::new(
+            build_pipeline(&self.device, &self.render_pass, data.clone())
+                .expect("failed to create inital pipeline"),
+        );
 
-        return self.pipeline.clone();
+        self.store.insert(name.clone(), pipeline);
+        self.blueprints
+            .write()
+            .expect("failed to acquire write lock")
+            .insert(name, data);
+    }
+
+    pub fn poll(&mut self) {
+        while let Ok((name, pipeline)) = self.rx.try_recv() {
+            match self
+                .store
+                .get_mut(&name)
+            {
+                Some(data) => *data = Rc::new(pipeline),
+                None => error!("failed to get pipeline in store for name: {}", name),
+            }
+        }
+    }
+
+    pub fn get_pipeline(&self, name: String) -> Option<Rc<Pipeline<B>>> {
+        match self
+            .store
+            .get(&name)
+        {
+            Some(data) => Some(data.clone()),
+            None => None,
+        }
     }
 }
 

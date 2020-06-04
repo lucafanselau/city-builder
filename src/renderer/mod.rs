@@ -1,7 +1,11 @@
 // Here lives our Main Renderer separated into smaller parts, as I see fit
 mod shaders;
+
 use shaders::Pipeline;
+
 mod vertex;
+
+mod ui;
 
 use log::*;
 
@@ -21,6 +25,8 @@ use gfx_hal::{
 };
 
 use crate::camera;
+use crate::renderer::shaders::ConstructData;
+use gfx_hal::pso::{VertexBufferDesc, VertexInputRate, AttributeDesc, Element};
 
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
@@ -64,8 +70,8 @@ unsafe fn push_constant_bytes<T>(push_constants: &T) -> &[u32] {
 
 #[derive(Debug)]
 pub struct Renderer<B: Backend>
-where
-    B::Device: Send + Sync,
+    where
+        B::Device: Send + Sync,
 {
     instance: B::Instance,
     surface: ManuallyDrop<B::Surface>,
@@ -92,17 +98,21 @@ where
     depth_image: Option<B::Image>,
     depth_image_memory: Option<B::Memory>,
     depth_image_view: Option<B::ImageView>,
+
+    // imgui renderer
+    imgui: ui::ImGuiRenderer<B>,
 }
 
 impl<B: Backend> Renderer<B> {
-    pub fn new(window: &winit::window::Window) -> Result<Renderer<B>, InitError> {
+    pub fn new(window: Rc<winit::window::Window>) -> Result<Renderer<B>, InitError> {
         let (instance, adapters, surface) = {
             let instance =
                 B::Instance::create("Mightycity", 1).expect("failed to create a instance");
 
             let surface = unsafe {
+                use std::borrow::Borrow;
                 instance
-                    .create_surface(window)
+                    .create_surface(window.borrow() as &winit::window::Window)
                     .expect("failed to create surface")
             };
 
@@ -242,7 +252,49 @@ impl<B: Backend> Renderer<B> {
             device: device.clone(),
         });
 
-        let shader_system = shaders::ShaderSystem::new(device.clone(), render_pass.clone());
+        let mut shader_system = shaders::ShaderSystem::new(device.clone(), render_pass.clone());
+
+        // Add our default triangle shader
+        {
+            use gfx_hal::pso::ShaderStageFlags;
+
+            let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
+
+            let vertex_buffers = vec![VertexBufferDesc {
+                binding: 0,
+                stride: std::mem::size_of::<vertex::Vertex>() as u32,
+                rate: VertexInputRate::Vertex,
+            }];
+
+            let attributes = vec![
+                AttributeDesc {
+                    location: 0,
+                    binding: 0,
+                    element: Element {
+                        format: Format::Rgb32Sfloat,
+                        offset: 0,
+                    },
+                },
+                AttributeDesc {
+                    location: 1,
+                    binding: 0,
+                    element: Element {
+                        format: Format::Rgb32Sfloat,
+                        offset: 12, // Hardcode!
+                    },
+                }
+            ];
+
+            let triangle_construct_data = ConstructData::new(
+                "triangle.vert".to_string(),
+                "triangle.frag".to_string(),
+                vertex_buffers,
+                attributes,
+                vec![(ShaderStageFlags::VERTEX, 0..push_constant_bytes)],
+            );
+
+            shader_system.add_pipeline("triangle".to_string(), triangle_construct_data);
+        }
 
         let physical_size = window.inner_size();
         let surface_extent = Extent2D {
@@ -254,6 +306,8 @@ impl<B: Backend> Renderer<B> {
 
         // load the model
         let mesh = vertex::create_mesh(device.clone(), &adapter)?;
+
+        let imgui = ui::ImGuiRenderer::new(window, device.clone())?;
 
         Ok(Renderer {
             instance,
@@ -277,6 +331,7 @@ impl<B: Backend> Renderer<B> {
             depth_image: None,
             depth_image_memory: None,
             depth_image_view: None,
+            imgui,
         })
     }
 
@@ -411,9 +466,18 @@ impl<B: Backend> Renderer<B> {
         self.should_configure_swapchain = true;
     }
 
-    pub fn render(&mut self, start_time: &Instant, camera: &camera::Camera) -> Result<(), RenderError> {
+    pub fn render(
+        &mut self,
+        start_time: &Instant,
+        camera: &camera::Camera,
+    ) -> Result<(), RenderError> {
         // The index for the in flight ressources
         let frame_idx: usize = self.frame as usize % self.frames_in_flight as usize;
+
+        // Update the Shader System
+        {
+            self.shader_system.poll();
+        }
 
         // See if we need to recreate the swapchain
         self.configure_swapchain()?;
@@ -434,7 +498,7 @@ impl<B: Backend> Renderer<B> {
 
             // ok so this frame is ready -> We can create a Frame Data Object
             self.frame_data[frame_idx] = Some(FrameData {
-                pipeline: self.shader_system.get_pipeline(),
+                pipeline: self.shader_system.get_pipeline("triangle".to_string()).expect("triangle pipeline not found"),
             });
 
             self.command_pools[frame_idx].reset(false);
@@ -513,7 +577,7 @@ impl<B: Backend> Renderer<B> {
             let cmd: &mut B::CommandBuffer = &mut self.command_buffers[frame_idx];
 
             cmd.begin_primary(CommandBufferFlags::ONE_TIME_SUBMIT);
-						
+
             cmd.set_viewports(0, &[viewport.clone()]);
             cmd.set_scissors(0, &[viewport.rect]);
 
@@ -604,6 +668,10 @@ impl<B: Backend> Renderer<B> {
         self.frame += 1;
 
         Ok::<(), RenderError>(())
+    }
+
+    pub fn handle_event<T>(&mut self, event: &winit::event::Event<T>) {
+        self.imgui.handle_event(event);
     }
 }
 

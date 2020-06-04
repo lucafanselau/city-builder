@@ -12,7 +12,7 @@ layout (push_constant) uniform PushConstants {
 layout (location = 0) out vec4 vertex_color;
 
 vec3 get_abs(vec3 vector) {
-	return vec3(abs(vector.x), abs(vector.y), abs(vector.z));
+	return vec3(vector.x, abs(vector.y), abs(vector.z));
 }
 
 void main() {

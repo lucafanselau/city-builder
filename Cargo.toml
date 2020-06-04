@@ -19,6 +19,7 @@ notify = "4.0.15"
 serde = { version = "1.0.110", features = ["derive"] }
 bincode = "1.2.1"
 nalgebra-glm = "0.7.0"
+owning_ref =  "0.4.1"
 
 # IMGUI
 imgui = "0.4.0"

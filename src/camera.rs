@@ -2,8 +2,6 @@ use nalgebra_glm as glm;
 
 use winit::event::{DeviceEvent, Event, KeyboardInput, WindowEvent};
 
-use log::info;
-
 #[derive(Debug, Clone)]
 enum MoveDirection {
     Forward,
@@ -29,12 +27,12 @@ pub struct Camera {
     pitch: f32,
     sensitivity: f32,
     move_dir: MoveDirection,
-		aspect_ratio: f32,
+    aspect_ratio: f32,
 }
 
 impl Camera {
     pub fn new(window: &winit::window::Window) -> Self {
-				let inner_size = window.inner_size();
+        let inner_size = window.inner_size();
         Self {
             data: None,
             position: glm::vec3(-1., 0., 0.),
@@ -43,7 +41,7 @@ impl Camera {
             pitch: 0.0,
             sensitivity: 0.3,
             move_dir: MoveDirection::None,
-						aspect_ratio: inner_size.width as f32 / inner_size.height as f32,
+            aspect_ratio: inner_size.width as f32 / inner_size.height as f32,
         }
     }
 
@@ -52,8 +50,10 @@ impl Camera {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::KeyboardInput { input, .. } => {
                     self.move_dir = get_move_dir(&input).unwrap_or(self.move_dir.clone());
-                },
-								WindowEvent::Resized(dims) => self.aspect_ratio = dims.width as f32 / dims.height as f32,
+                }
+                WindowEvent::Resized(dims) => {
+                    self.aspect_ratio = dims.width as f32 / dims.height as f32
+                }
                 _ => (),
             },
             Event::DeviceEvent { event, .. } => match event {
@@ -94,18 +94,15 @@ impl Camera {
             MoveDirection::None => (),
         }
 
-				// info!("position: {:?}", self.position);
+        // info!("position: {:?}", self.position);
 
-				let view_matrix = glm::look_at_rh(
-            &self.position,
-            &(self.position + view_dir),
-            &up
-        );
-       
-        let projection_matrix = glm::perspective_rh_zo(self.aspect_ratio, f32::to_radians(45.0), 0.1, 100.0);
-				// projection_matrix.m22 *= -1.;
+        let view_matrix = glm::look_at_rh(&self.position, &(self.position + view_dir), &up);
 
-				self.data = Some(projection_matrix * view_matrix);
+        let projection_matrix =
+            glm::perspective_rh_zo(self.aspect_ratio, f32::to_radians(45.0), 0.1, 100.0);
+        // projection_matrix.m22 *= -1.;
+
+        self.data = Some(projection_matrix * view_matrix);
     }
 }
 
