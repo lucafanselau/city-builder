@@ -1,20 +1,11 @@
 // Here lives our Main Renderer separated into smaller parts, as I see fit
 mod shaders;
-
 use shaders::Pipeline;
-
-mod vertex;
-
 mod ui;
-
-use log::*;
-
-use winit::dpi::PhysicalSize;
-
-use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
-
-use nalgebra_glm as glm;
-
+mod vertex;
+use crate::camera;
+use crate::renderer::shaders::ConstructData;
+use gfx_hal::pso::{AttributeDesc, Element, VertexBufferDesc, VertexInputRate};
 use gfx_hal::{
     device::Device,
     format::Format,
@@ -23,10 +14,11 @@ use gfx_hal::{
     window::{Extent2D, Surface},
     Backend, Instance,
 };
-
-use crate::camera;
-use crate::renderer::shaders::ConstructData;
-use gfx_hal::pso::{VertexBufferDesc, VertexInputRate, AttributeDesc, Element};
+use imgui::{im_str, Condition, Slider, Window};
+use log::*;
+use nalgebra_glm as glm;
+use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
+use winit::dpi::PhysicalSize;
 
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
@@ -61,7 +53,7 @@ pub struct PushConstants {
     view_projection: glm::Mat4,
 }
 
-unsafe fn push_constant_bytes<T>(push_constants: &T) -> &[u32] {
+pub unsafe fn push_constant_bytes<T>(push_constants: &T) -> &[u32] {
     let size_in_bytes = std::mem::size_of::<T>();
     let size_in_u32s = size_in_bytes / std::mem::size_of::<u32>();
     let start_ptr = push_constants as *const T as *const u32;
@@ -70,8 +62,8 @@ unsafe fn push_constant_bytes<T>(push_constants: &T) -> &[u32] {
 
 #[derive(Debug)]
 pub struct Renderer<B: Backend>
-    where
-        B::Device: Send + Sync,
+where
+    B::Device: Send + Sync,
 {
     instance: B::Instance,
     surface: ManuallyDrop<B::Surface>,
@@ -101,6 +93,9 @@ pub struct Renderer<B: Backend>
 
     // imgui renderer
     imgui: ui::ImGuiRenderer<B>,
+
+    // Teapot Position
+    pos: glm::Vec3,
 }
 
 impl<B: Backend> Renderer<B> {
@@ -138,7 +133,7 @@ impl<B: Backend> Renderer<B> {
             .expect("couldn't find suitable adapter");
         debug!("Selected: {:?}", adapter.info);
 
-        let (device, queue_group): (Arc<B::Device>, QueueGroup<B>) = {
+        let (device, mut queue_group): (Arc<B::Device>, QueueGroup<B>) = {
             // need to find the queue_family
             let queue_family = adapter
                 .queue_families
@@ -162,7 +157,7 @@ impl<B: Backend> Renderer<B> {
 
         let frames_in_flight = 3u8;
 
-        let (command_pools, command_buffers) = unsafe {
+        let (mut command_pools, command_buffers) = unsafe {
             use gfx_hal::command::Level;
             use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
 
@@ -282,7 +277,7 @@ impl<B: Backend> Renderer<B> {
                         format: Format::Rgb32Sfloat,
                         offset: 12, // Hardcode!
                     },
-                }
+                },
             ];
 
             let triangle_construct_data = ConstructData::new(
@@ -291,6 +286,7 @@ impl<B: Backend> Renderer<B> {
                 vertex_buffers,
                 attributes,
                 vec![(ShaderStageFlags::VERTEX, 0..push_constant_bytes)],
+                vec![],
             );
 
             shader_system.add_pipeline("triangle".to_string(), triangle_construct_data);
@@ -307,7 +303,15 @@ impl<B: Backend> Renderer<B> {
         // load the model
         let mesh = vertex::create_mesh(device.clone(), &adapter)?;
 
-        let imgui = ui::ImGuiRenderer::new(window, device.clone())?;
+        let imgui = ui::ImGuiRenderer::new(
+            window,
+            device.clone(),
+            &mut shader_system,
+            &adapter,
+            command_pools.get_mut(0).expect(""),
+            queue_group.queues.get_mut(0).expect(""),
+            frames_in_flight,
+        )?;
 
         Ok(Renderer {
             instance,
@@ -332,6 +336,7 @@ impl<B: Backend> Renderer<B> {
             depth_image_memory: None,
             depth_image_view: None,
             imgui,
+            pos: glm::vec3(0.0, 0.0, 0.0),
         })
     }
 
@@ -498,7 +503,10 @@ impl<B: Backend> Renderer<B> {
 
             // ok so this frame is ready -> We can create a Frame Data Object
             self.frame_data[frame_idx] = Some(FrameData {
-                pipeline: self.shader_system.get_pipeline("triangle".to_string()).expect("triangle pipeline not found"),
+                pipeline: self
+                    .shader_system
+                    .get_pipeline("triangle".to_string())
+                    .expect("triangle pipeline not found"),
             });
 
             self.command_pools[frame_idx].reset(false);
@@ -557,10 +565,11 @@ impl<B: Backend> Renderer<B> {
             }
         };
 
-        let angle = start_time.elapsed().as_secs_f32();
+        // let angle = start_time.elapsed().as_secs_f32();
 
         let teapots = {
-            let transform = glm::rotate(&glm::Mat4::identity(), angle, &glm::vec3(0., 1., 0.));
+            let transform = glm::translate(&glm::Mat4::identity(), &self.pos);
+            // glm::rotate(&glm::Mat4::identity(), angle, &glm::vec3(0., 1., 0.));
 
             &[PushConstants {
                 transform,
@@ -588,7 +597,7 @@ impl<B: Backend> Renderer<B> {
                 &[
                     ClearValue {
                         color: ClearColor {
-                            float32: [0.0, 0.0, 0.0, 1.0],
+                            float32: [1.0, 1.0, 1.0, 1.0],
                         },
                     },
                     ClearValue {
@@ -632,6 +641,37 @@ impl<B: Backend> Renderer<B> {
                 );
 
                 cmd.draw(0..self.mesh.vertex_length, 0..1);
+            }
+
+            {
+                let mut pos = self.pos.clone();
+
+                self.imgui.update(frame_idx, |ui| {
+                    Window::new(im_str!("Hello world"))
+                        .size([300.0, 100.0], Condition::FirstUseEver)
+                        .build(ui, || {
+                            ui.text(im_str!("Hello world!"));
+                            ui.text(im_str!("こんにちは世界！"));
+                            ui.text(im_str!("This...is...imgui-rs!"));
+
+                            Slider::new(im_str!("Position X"), -5.0..=5.0)
+                                .display_format(im_str!("%f"))
+                                .build_array(ui, pos.as_mut_slice());
+
+                            ui.separator();
+                            let mouse_pos = ui.io().mouse_pos;
+                            ui.text(format!(
+                                "Mouse Position: ({:.1},{:.1})",
+                                mouse_pos[0], mouse_pos[1]
+                            ));
+                        });
+
+                    ui.show_demo_window(&mut true);
+                });
+
+                self.imgui.render(frame_idx, cmd, &self.shader_system);
+
+                self.pos = pos;
             }
 
             cmd.end_render_pass();

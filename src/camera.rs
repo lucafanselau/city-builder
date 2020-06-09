@@ -1,6 +1,6 @@
 use nalgebra_glm as glm;
 
-use winit::event::{DeviceEvent, Event, KeyboardInput, WindowEvent};
+use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
 #[derive(Debug, Clone)]
 enum MoveDirection {
@@ -28,6 +28,7 @@ pub struct Camera {
     sensitivity: f32,
     move_dir: MoveDirection,
     aspect_ratio: f32,
+    active: bool,
 }
 
 impl Camera {
@@ -42,6 +43,7 @@ impl Camera {
             sensitivity: 0.3,
             move_dir: MoveDirection::None,
             aspect_ratio: inner_size.width as f32 / inner_size.height as f32,
+            active: true,
         }
     }
 
@@ -50,6 +52,12 @@ impl Camera {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::KeyboardInput { input, .. } => {
                     self.move_dir = get_move_dir(&input).unwrap_or(self.move_dir.clone());
+
+                    if let Some(keycode) = input.virtual_keycode {
+                        if keycode == VirtualKeyCode::Z && input.state == ElementState::Pressed {
+                            self.active = !self.active;
+                        }
+                    }
                 }
                 WindowEvent::Resized(dims) => {
                     self.aspect_ratio = dims.width as f32 / dims.height as f32
@@ -60,8 +68,10 @@ impl Camera {
                 DeviceEvent::MouseMotion { delta } => {
                     // we want to move the camera according to this mouse movement
                     // info!("{:?}", delta);
-                    self.yaw -= (delta.0 as f32) * self.sensitivity;
-                    self.pitch -= (delta.1 as f32) * self.sensitivity;
+                    if self.active {
+                        self.yaw -= (delta.0 as f32) * self.sensitivity;
+                        self.pitch -= (delta.1 as f32) * self.sensitivity;
+                    }
                 }
                 _ => (),
             },

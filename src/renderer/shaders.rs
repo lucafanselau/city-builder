@@ -4,21 +4,35 @@ use std::fs;
 use std::mem::ManuallyDrop;
 use std::ops::Range;
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
+use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-/// This module will provide the pipeline and will check to recompiler after the file changed.
-use gfx_hal::{Backend, device::Device, pso};
 use gfx_hal::pso::{AttributeDesc, VertexBufferDesc};
+/// This module will provide the pipeline and will check to recompiler after the file changed.
+use gfx_hal::{device::Device, pso, Backend};
 use log::*;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::renderer::RenderPass;
 
 // use std::fmt;
+#[derive(Debug)]
+pub struct DescriptorLayout<B: Backend> {
+    pub device: Arc<B::Device>,
+    pub layout: ManuallyDrop<B::DescriptorSetLayout>,
+}
+
+impl<B: Backend> Drop for DescriptorLayout<B> {
+    fn drop(&mut self) {
+        unsafe {
+            self.device
+                .destroy_descriptor_set_layout(ManuallyDrop::take(&mut self.layout));
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Pipeline<B: Backend> {
@@ -39,24 +53,31 @@ impl<B: Backend> Drop for Pipeline<B> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ConstructData {
+pub struct ConstructData<B: Backend> {
     vertex_file: String,
     fragment_file: String,
     vertex_buffers: Vec<VertexBufferDesc>,
     attributes: Vec<AttributeDesc>,
     push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>,
+    layouts: Vec<Arc<DescriptorLayout<B>>>,
 }
 
-impl ConstructData {
-    pub fn new(vertex_file: String, fragment_file: String, vertex_buffers: Vec<VertexBufferDesc>,
-               attributes: Vec<AttributeDesc>,
-               push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>) -> Self {
+impl<B: Backend> ConstructData<B> {
+    pub fn new(
+        vertex_file: String,
+        fragment_file: String,
+        vertex_buffers: Vec<VertexBufferDesc>,
+        attributes: Vec<AttributeDesc>,
+        push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>,
+        layouts: Vec<Arc<DescriptorLayout<B>>>,
+    ) -> Self {
         ConstructData {
             vertex_file,
             fragment_file,
             vertex_buffers,
             attributes,
             push_constants,
+            layouts,
         }
     }
 }
@@ -89,7 +110,7 @@ fn compile_shader(
 fn build_pipeline<B: Backend>(
     device: &Arc<B::Device>,
     render_pass: &Arc<RenderPass<B>>,
-    data: ConstructData,
+    data: ConstructData<B>,
 ) -> Result<Pipeline<B>, Box<dyn Error>> {
     let pipeline_layout = unsafe {
         // let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
@@ -97,7 +118,13 @@ fn build_pipeline<B: Backend>(
         // let pipeline_layout = device
         //     .create_pipeline_layout(&[], &)?;
 
-        let pipeline_layout = device.create_pipeline_layout(&[], &data.push_constants)?;
+        use std::borrow::Borrow;
+        use std::ops::Deref;
+
+        let pipeline_layout = device.create_pipeline_layout(
+            data.layouts.iter().map(|l| l.layout.deref()),
+            &data.push_constants,
+        )?;
 
         Ok::<B::PipelineLayout, Box<dyn Error>>(pipeline_layout)
     }?;
@@ -105,8 +132,8 @@ fn build_pipeline<B: Backend>(
     let pipeline = unsafe {
         use gfx_hal::pass::Subpass;
         use gfx_hal::pso::{
-            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face,
-            GraphicsPipelineDesc, GraphicsShaderSet, Primitive, Rasterizer, Specialization,
+            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, GraphicsPipelineDesc,
+            GraphicsShaderSet, Primitive, Rasterizer, Specialization,
         };
 
         // let vertex_shader = include_str!("../../assets/shaders/triangle.vert");
@@ -158,7 +185,7 @@ fn build_pipeline<B: Backend>(
             shader_set,
             Primitive::TriangleList,
             Rasterizer {
-                cull_face: Face::BACK,
+                cull_face: Face::NONE,
                 ..Rasterizer::FILL
             },
             &pipeline_layout,
@@ -180,18 +207,18 @@ fn build_pipeline<B: Backend>(
         }
 
         // Depth Stencil
-        {
-            use gfx_hal::pso::{Comparison, DepthTest};
-
-            pipeline_desc.depth_stencil.depth = Some(DepthTest {
-                fun: Comparison::Less,
-                write: true,
-            });
-
-            pipeline_desc.depth_stencil.depth_bounds = false;
-            // Maybe that is the default... Who knows
-            pipeline_desc.depth_stencil.stencil = None;
-        }
+        // {
+        //     use gfx_hal::pso::{Comparison, DepthTest};
+        //
+        //     pipeline_desc.depth_stencil.depth = Some(DepthTest {
+        //         fun: Comparison::Less,
+        //         write: true,
+        //     });
+        //
+        //     pipeline_desc.depth_stencil.depth_bounds = false;
+        //     // Maybe that is the default... Who knows
+        //     pipeline_desc.depth_stencil.stencil = None;
+        // }
 
         let pipeline = device.create_graphics_pipeline(&pipeline_desc, None)?;
 
@@ -216,9 +243,9 @@ pub struct ShaderSystem<B: Backend> {
     rx: Receiver<(String, Pipeline<B>)>,
     store: HashMap<String, Rc<Pipeline<B>>>,
     /// Instructions to build the Pipeline
-    blueprints: Arc<RwLock<HashMap<String, ConstructData>>>,
+    blueprints: Arc<RwLock<HashMap<String, ConstructData<B>>>>,
     /// Just used to build the first pipeline when add pipeline is called
-    render_pass: Arc<RenderPass<B>>
+    render_pass: Arc<RenderPass<B>>,
 }
 
 impl<B: Backend> ShaderSystem<B> {
@@ -227,7 +254,7 @@ impl<B: Backend> ShaderSystem<B> {
         // this will be the channel for the newly created pipelines
         let (tx, rx) = channel();
 
-        let blueprints = Arc::new(RwLock::new(HashMap::<String, ConstructData>::new()));
+        let blueprints = Arc::new(RwLock::new(HashMap::<String, ConstructData<B>>::new()));
 
         let handle = {
             let running = running.clone();
@@ -277,10 +304,11 @@ impl<B: Backend> ShaderSystem<B> {
                                             if let Some((name, data)) = found {
                                                 // -> we need to rebuilt the pipeline
                                                 if let Ok(pipeline) =
-                                                build_pipeline(&device, &render_pass, data)
+                                                    build_pipeline(&device, &render_pass, data)
                                                 {
                                                     info!("rebuild pipeline!");
-                                                    tx.send((name.clone(), pipeline)).expect("failed to send new pipeline");
+                                                    tx.send((name.clone(), pipeline))
+                                                        .expect("failed to send new pipeline");
                                                 } else {
                                                     error!("failed to rebuild pipeline");
                                                 }
@@ -317,11 +345,11 @@ impl<B: Backend> ShaderSystem<B> {
             rx,
             store: HashMap::new(),
             blueprints,
-            render_pass
+            render_pass,
         }
     }
 
-    pub fn add_pipeline(&mut self, name: String, data: ConstructData) {
+    pub fn add_pipeline(&mut self, name: String, data: ConstructData<B>) {
         // Construct the first pipeline
         let pipeline = Rc::new(
             build_pipeline(&self.device, &self.render_pass, data.clone())
@@ -337,10 +365,7 @@ impl<B: Backend> ShaderSystem<B> {
 
     pub fn poll(&mut self) {
         while let Ok((name, pipeline)) = self.rx.try_recv() {
-            match self
-                .store
-                .get_mut(&name)
-            {
+            match self.store.get_mut(&name) {
                 Some(data) => *data = Rc::new(pipeline),
                 None => error!("failed to get pipeline in store for name: {}", name),
             }
@@ -348,10 +373,7 @@ impl<B: Backend> ShaderSystem<B> {
     }
 
     pub fn get_pipeline(&self, name: String) -> Option<Rc<Pipeline<B>>> {
-        match self
-            .store
-            .get(&name)
-        {
+        match self.store.get(&name) {
             Some(data) => Some(data.clone()),
             None => None,
         }

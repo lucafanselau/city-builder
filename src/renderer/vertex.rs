@@ -1,6 +1,9 @@
 use bincode::deserialize;
 use gfx_hal;
+use gfx_hal::adapter::{MemoryType, PhysicalDevice};
 use gfx_hal::device::Device;
+use gfx_hal::memory::Requirements;
+use gfx_hal::MemoryTypeId;
 use std::{error::Error, mem::ManuallyDrop, sync::Arc};
 
 #[derive(serde::Deserialize)]
@@ -42,22 +45,14 @@ pub fn load_teapot() -> Result<Vec<Vertex>, MeshError> {
     Ok(mesh)
 }
 
-unsafe fn make_buffer<B: gfx_hal::Backend>(
-    device: &B::Device,
+pub fn find_memory_type<B: gfx_hal::Backend>(
     physical_device: &B::PhysicalDevice,
-    buffer_len: usize,
-    usage: gfx_hal::buffer::Usage,
+    req: &Requirements,
     properties: gfx_hal::memory::Properties,
-) -> Result<(B::Memory, B::Buffer), MeshError> {
-    use gfx_hal::{adapter::PhysicalDevice, MemoryTypeId};
-
-    let mut buffer = device.create_buffer(buffer_len as u64, usage)?;
-
-    let req = device.get_buffer_requirements(&buffer);
-
+) -> MemoryTypeId {
     let memory_types = physical_device.memory_properties().memory_types;
 
-    let memory_type = memory_types
+    memory_types
         .iter()
         .enumerate()
         .find(|(id, mem_type)| {
@@ -65,7 +60,23 @@ unsafe fn make_buffer<B: gfx_hal::Backend>(
             type_supported && mem_type.properties.contains(properties)
         })
         .map(|(id, _ty)| MemoryTypeId(id))
-        .expect("did not find memory type");
+        .expect("did not find memory type")
+}
+
+pub unsafe fn make_buffer<B: gfx_hal::Backend>(
+    device: &B::Device,
+    physical_device: &B::PhysicalDevice,
+    buffer_len: usize,
+    usage: gfx_hal::buffer::Usage,
+    properties: gfx_hal::memory::Properties,
+) -> Result<(B::Memory, B::Buffer), MeshError> {
+    use gfx_hal::MemoryTypeId;
+
+    let mut buffer = device.create_buffer(buffer_len as u64, usage)?;
+
+    let req = device.get_buffer_requirements(&buffer);
+
+    let memory_type = find_memory_type::<B>(physical_device, &req, properties);
 
     let buffer_memory = device.allocate_memory(memory_type, req.size)?;
 
