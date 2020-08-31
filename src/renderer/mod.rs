@@ -14,7 +14,7 @@ use gfx_hal::{
     window::{Extent2D, Surface},
     Backend, Instance,
 };
-use imgui::{im_str, Condition, Slider, Window};
+use imgui::{im_str, ColorPicker, Condition, Slider, Window};
 use log::*;
 use nalgebra_glm as glm;
 use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
@@ -96,6 +96,7 @@ where
 
     // Teapot Position
     pos: glm::Vec3,
+    color: [f32; 4],
 }
 
 impl<B: Backend> Renderer<B> {
@@ -252,32 +253,19 @@ impl<B: Backend> Renderer<B> {
         // Add our default triangle shader
         {
             use gfx_hal::pso::ShaderStageFlags;
+            use crate::renderer::shaders::{create_vertex_buffer_desc, create_attribute_desc};
 
             let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
 
-            let vertex_buffers = vec![VertexBufferDesc {
-                binding: 0,
-                stride: std::mem::size_of::<vertex::Vertex>() as u32,
-                rate: VertexInputRate::Vertex,
-            }];
+            let vertex_buffers = vec![create_vertex_buffer_desc(
+                0,
+                std::mem::size_of::<vertex::Vertex>() as u32,
+                VertexInputRate::Vertex,
+            )];
 
             let attributes = vec![
-                AttributeDesc {
-                    location: 0,
-                    binding: 0,
-                    element: Element {
-                        format: Format::Rgb32Sfloat,
-                        offset: 0,
-                    },
-                },
-                AttributeDesc {
-                    location: 1,
-                    binding: 0,
-                    element: Element {
-                        format: Format::Rgb32Sfloat,
-                        offset: 12, // Hardcode!
-                    },
-                },
+                create_attribute_desc(0, 0, Format::Rgb32Sfloat, 0),
+                create_attribute_desc(1, 0, Format::Rgb32Sfloat, 12),
             ];
 
             let triangle_construct_data = ConstructData::new(
@@ -285,6 +273,8 @@ impl<B: Backend> Renderer<B> {
                 "triangle.frag".to_string(),
                 vertex_buffers,
                 attributes,
+                true,
+                gfx_hal::pso::Face::BACK,
                 vec![(ShaderStageFlags::VERTEX, 0..push_constant_bytes)],
                 vec![],
             );
@@ -337,6 +327,7 @@ impl<B: Backend> Renderer<B> {
             depth_image_view: None,
             imgui,
             pos: glm::vec3(0.0, 0.0, 0.0),
+            color: [0.0, 0.0, 0.0, 0.0],
         })
     }
 
@@ -597,7 +588,7 @@ impl<B: Backend> Renderer<B> {
                 &[
                     ClearValue {
                         color: ClearColor {
-                            float32: [1.0, 1.0, 1.0, 1.0],
+                            float32: self.color,
                         },
                     },
                     ClearValue {
@@ -645,33 +636,45 @@ impl<B: Backend> Renderer<B> {
 
             {
                 let mut pos = self.pos.clone();
+                let mut color = self.color.clone();
 
-                self.imgui.update(frame_idx, |ui| {
+                let ui = self.imgui.new_frame();
+
+                {
                     Window::new(im_str!("Hello world"))
                         .size([300.0, 100.0], Condition::FirstUseEver)
-                        .build(ui, || {
-                            ui.text(im_str!("Hello world!"));
-                            ui.text(im_str!("こんにちは世界！"));
-                            ui.text(im_str!("This...is...imgui-rs!"));
+                        .build(&ui.ui, || {
+                            ui.ui.text(im_str!("Hello world!"));
+
+                            let delta = ui.ui.io().delta_time;
+
+                            ui.ui.text(format!("Delta Time: {}", delta));
+
+                            ui.ui.text(format!("FPS: {:.1}", 1.0 / delta));
 
                             Slider::new(im_str!("Position X"), -5.0..=5.0)
                                 .display_format(im_str!("%f"))
-                                .build_array(ui, pos.as_mut_slice());
+                                .build_array(&ui.ui, pos.as_mut_slice());
 
-                            ui.separator();
-                            let mouse_pos = ui.io().mouse_pos;
-                            ui.text(format!(
+                            ui.ui.separator();
+                            let mouse_pos = ui.ui.io().mouse_pos;
+                            ui.ui.text(format!(
                                 "Mouse Position: ({:.1},{:.1})",
                                 mouse_pos[0], mouse_pos[1]
                             ));
+
+                            ColorPicker::new(im_str!("background"), &mut color).build(&ui.ui);
                         });
 
-                    ui.show_demo_window(&mut true);
-                });
+                    // ui.ui.show_demo_window(&mut true);
+                }
+
+                self.imgui.update(frame_idx, ui);
 
                 self.imgui.render(frame_idx, cmd, &self.shader_system);
 
                 self.pos = pos;
+                self.color = color;
             }
 
             cmd.end_render_pass();

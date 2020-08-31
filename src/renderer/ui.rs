@@ -18,8 +18,8 @@ use gfx_hal::pso::{
 };
 use gfx_hal::queue::CommandQueue;
 use nalgebra_glm as glm;
-use shaderc::ResourceKind::Sampler;
-use std::borrow::Borrow;
+use shaderc::ResourceKind::Sampler;use std::borrow::{Borrow, BorrowMut};
+use std::cell::{RefCell, RefMut};
 use std::fmt;
 use std::mem::ManuallyDrop;
 use std::{rc::Rc, sync::Arc, time::Instant};
@@ -56,11 +56,11 @@ impl<B: Backend> FontAtlasTexture<B> {
 
         // 0. First we compute some memory related values.
         let pixel_size = 4; // By definition
-        // let row_size = pixel_size * (texture.width as usize);
-        // let limits = adapter.physical_device.limits();
-        // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
-        // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
-        // debug_assert!(row_pitch as usize >= row_size);
+                            // let row_size = pixel_size * (texture.width as usize);
+                            // let limits = adapter.physical_device.limits();
+                            // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
+                            // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
+                            // debug_assert!(row_pitch as usize >= row_size);
 
         // Create Staging Buffer
         let required_bytes = (texture.width * texture.height * pixel_size) as usize;
@@ -73,7 +73,7 @@ impl<B: Backend> FontAtlasTexture<B> {
                 Usage::TRANSFER_SRC,
                 Properties::CPU_VISIBLE | Properties::COHERENT,
             )
-                .expect("failed to create staging buffer for ui texture atlas")
+            .expect("failed to create staging buffer for ui texture atlas")
         };
 
         // Write to that Buffer
@@ -283,10 +283,24 @@ struct FrameData<B: Backend> {
     clip_scale: [f32; 2],
 }
 
+pub struct UiHandle {
+    imgui: Context,
+    pub ui: Ui<'static>,
+}
 
+impl UiHandle {
+    pub fn new(mut imgui: Context) -> UiHandle {
+        let ctx_ptr = &mut imgui as *mut Context;
+        let ui = unsafe { &mut *ctx_ptr }.frame();
+
+        UiHandle { imgui, ui }
+    }
+}
+
+#[derive(Debug)]
 pub struct ImGuiRenderer<B: Backend>
-    where
-        B::Device: Send + Sync,
+where
+    B::Device: Send + Sync,
 {
     platform: WinitPlatform,
     imgui: Option<Context>,
@@ -300,21 +314,7 @@ pub struct ImGuiRenderer<B: Backend>
     descriptor_set: B::DescriptorSet,
 }
 
-// Because Ui is not Debug
-impl<B: Backend> fmt::Debug for ImGuiRenderer<B> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ImGuiRenderer")
-            .field("platform", &self.platform)
-            .field("imgui", &self.imgui)
-            .field("last_frame", &self.last_frame)
-            .field("window", &self.window)
-            .field("device", &self.device)
-            .finish()
-    }
-}
-
 impl<B: Backend> ImGuiRenderer<B> {
-
     pub fn new(
         window: Rc<Window>,
         device: Arc<B::Device>,
@@ -325,10 +325,18 @@ impl<B: Backend> ImGuiRenderer<B> {
         frames_in_flight: u8,
     ) -> Result<ImGuiRenderer<B>, Box<dyn std::error::Error>> {
         let mut imgui = Context::create();
-        // Configuration
 
         let mut platform = WinitPlatform::init(&mut imgui);
         platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Default);
+
+        {
+            let hidpi_factor = platform.hidpi_factor();
+            imgui.fonts().add_font(&[imgui::FontSource::TtfData {
+                data: include_bytes!("../../assets/fonts/FiraCode-Regular.ttf"),
+                size_pixels: (13.0 * hidpi_factor) as f32,
+                config: None,
+            }]);
+        }
 
         imgui.set_renderer_name(Some(ImString::new("citybuilder-imgui-renderer")));
 
@@ -419,6 +427,8 @@ impl<B: Backend> ImGuiRenderer<B> {
                 "ui.frag".to_string(),
                 vertex_buffers,
                 attributes,
+                false,
+                gfx_hal::pso::Face::NONE,
                 vec![(ShaderStageFlags::VERTEX, 0..push_constant_bytes)],
                 vec![description_set_layout.clone()],
             );
@@ -504,7 +514,7 @@ impl<B: Backend> ImGuiRenderer<B> {
                     Usage::VERTEX,
                     Properties::CPU_VISIBLE | Properties::COHERENT,
                 )
-                    .expect("failed to create ui vertex buffer");
+                .expect("failed to create ui vertex buffer");
                 let index = vertex::make_buffer::<B>(
                     device.as_ref(),
                     &adapter.physical_device,
@@ -512,7 +522,7 @@ impl<B: Backend> ImGuiRenderer<B> {
                     Usage::INDEX,
                     Properties::CPU_VISIBLE | Properties::COHERENT,
                 )
-                    .expect("failed to create ui index buffer");
+                .expect("failed to create ui index buffer");
 
                 frames.push(FrameData {
                     vertex_buffer: vertex,
@@ -523,7 +533,7 @@ impl<B: Backend> ImGuiRenderer<B> {
                     fb_width: 0.0,
                     fb_height: 0.0,
                     clip_off: [0.0, 0.0],
-                    clip_scale: [0.0, 0.0]
+                    clip_scale: [0.0, 0.0],
                 })
             }
         }
@@ -603,64 +613,63 @@ impl<B: Backend> ImGuiRenderer<B> {
         }
     }
 
-    pub fn update(&mut self, idx: usize, mut f: impl FnMut(&Ui<'_>)) {
-        let mut imgui = self.imgui.take().expect("imgui was not initialized");
+    pub fn new_frame(&mut self) -> UiHandle {
+        UiHandle::new(self.imgui.take().expect("imgui was not initialized"))
+    }
 
-        let draw_data = {
-            let ui = imgui.frame();
+    pub fn update(&mut self, idx: usize, handle: UiHandle) {
+        match handle {
+            UiHandle { imgui, ui } => {
+                self.platform.prepare_render(&ui, &self.window);
+                let draw_data = ui.render();
 
-            // Call the callback
-            f(&ui);
+                {
+                    self.update_buffers(draw_data, &self.frames[idx])
+                }
 
-            self.platform.prepare_render(&ui, &self.window);
-            ui.render()
-        };
+                {
+                    let frame = self.frames.get_mut(idx).expect("frame not created");
 
-        {
-            self.update_buffers(draw_data, &self.frames[idx])
-        }
+                    let left = draw_data.display_pos[0];
+                    let right = draw_data.display_pos[0] + draw_data.display_size[0];
+                    let top = draw_data.display_pos[1];
+                    let bottom = draw_data.display_pos[1] + draw_data.display_size[1];
+                    frame.matrix = glm::ortho_rh_zo(left, right, top, bottom, -1.0, 1.0);
 
-        {
-            let frame = self.frames.get_mut(idx).expect("frame not created");
+                    frame.fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
+                    frame.fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
 
-            let left = draw_data.display_pos[0];
-            let right = draw_data.display_pos[0] + draw_data.display_size[0];
-            let top = draw_data.display_pos[1];
-            let bottom = draw_data.display_pos[1] + draw_data.display_size[1];
-            frame.matrix = glm::ortho_rh_zo(left, right, top, bottom, -1.0, 1.0);
+                    frame.clip_off = draw_data.display_pos;
+                    frame.clip_scale = draw_data.framebuffer_scale;
 
-            frame.fb_width = draw_data.display_size[0] * draw_data.framebuffer_scale[0];
-            frame.fb_height = draw_data.display_size[1] * draw_data.framebuffer_scale[1];
+                    frame.draw_infos.clear();
 
-            frame.clip_off = draw_data.display_pos;
-            frame.clip_scale = draw_data.framebuffer_scale;
-
-            frame.draw_infos.clear();
-
-            let mut vertex_offset = 0;
-            let mut index_offset: u32 = 0;
-            for draw_list in draw_data.draw_lists() {
-                for draw_cmd in draw_list.commands() {
-                    match draw_cmd {
-                        DrawCmd::Elements {
-                            count,
-                            cmd_params: DrawCmdParams { clip_rect, .. },
-                        } => {
-                            frame.draw_infos.push(DrawInfo {
-                                clip_rect,
-                                count,
-                                vertex_offset,
-                                index_offset,
-                            });
-                            index_offset += count as u32;
+                    let mut vertex_offset = 0;
+                    let mut index_offset: u32 = 0;
+                    for draw_list in draw_data.draw_lists() {
+                        for draw_cmd in draw_list.commands() {
+                            match draw_cmd {
+                                DrawCmd::Elements {
+                                    count,
+                                    cmd_params: DrawCmdParams { clip_rect, .. },
+                                } => {
+                                    frame.draw_infos.push(DrawInfo {
+                                        clip_rect,
+                                        count,
+                                        vertex_offset,
+                                        index_offset,
+                                    });
+                                    index_offset += count as u32;
+                                }
+                                _ => (),
+                            }
                         }
-                        _ => (),
+                        vertex_offset += draw_list.vtx_buffer().len() as i32
                     }
                 }
-                vertex_offset += draw_list.vtx_buffer().len() as i32
+                self.imgui = Some(imgui);
             }
         }
-        self.imgui = Some(imgui);
     }
 
     pub fn render(&mut self, idx: usize, cmd: &mut B::CommandBuffer, shader: &ShaderSystem<B>) {

@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use gfx_hal::pso::{AttributeDesc, VertexBufferDesc};
+use gfx_hal::pso::{AttributeDesc, Element, VertexBufferDesc};
 /// This module will provide the pipeline and will check to recompiler after the file changed.
 use gfx_hal::{device::Device, pso, Backend};
 use log::*;
@@ -52,12 +52,43 @@ impl<B: Backend> Drop for Pipeline<B> {
     }
 }
 
+use gfx_hal::pso::VertexInputRate;
+
+pub fn create_vertex_buffer_desc(
+    binding: u32,
+    stride: u32,
+    rate: VertexInputRate,
+) -> VertexBufferDesc {
+    VertexBufferDesc {
+        binding,
+        stride,
+        rate,
+    }
+}
+
+use gfx_hal::format::Format;
+
+pub fn create_attribute_desc(
+    location: u32,
+    binding: u32,
+    format: Format,
+    offset: u32,
+) -> AttributeDesc {
+    AttributeDesc {
+        location,
+        binding,
+        element: Element { format, offset },
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConstructData<B: Backend> {
     vertex_file: String,
     fragment_file: String,
     vertex_buffers: Vec<VertexBufferDesc>,
     attributes: Vec<AttributeDesc>,
+    enable_depth: bool,
+    cull_face: gfx_hal::pso::Face,
     push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>,
     layouts: Vec<Arc<DescriptorLayout<B>>>,
 }
@@ -68,6 +99,8 @@ impl<B: Backend> ConstructData<B> {
         fragment_file: String,
         vertex_buffers: Vec<VertexBufferDesc>,
         attributes: Vec<AttributeDesc>,
+        enable_depth: bool,
+        cull_face: gfx_hal::pso::Face,
         push_constants: Vec<(pso::ShaderStageFlags, Range<u32>)>,
         layouts: Vec<Arc<DescriptorLayout<B>>>,
     ) -> Self {
@@ -76,6 +109,8 @@ impl<B: Backend> ConstructData<B> {
             fragment_file,
             vertex_buffers,
             attributes,
+            enable_depth,
+            cull_face,
             push_constants,
             layouts,
         }
@@ -185,7 +220,7 @@ fn build_pipeline<B: Backend>(
             shader_set,
             Primitive::TriangleList,
             Rasterizer {
-                cull_face: Face::NONE,
+                cull_face: data.cull_face,
                 ..Rasterizer::FILL
             },
             &pipeline_layout,
@@ -207,18 +242,18 @@ fn build_pipeline<B: Backend>(
         }
 
         // Depth Stencil
-        // {
-        //     use gfx_hal::pso::{Comparison, DepthTest};
-        //
-        //     pipeline_desc.depth_stencil.depth = Some(DepthTest {
-        //         fun: Comparison::Less,
-        //         write: true,
-        //     });
-        //
-        //     pipeline_desc.depth_stencil.depth_bounds = false;
-        //     // Maybe that is the default... Who knows
-        //     pipeline_desc.depth_stencil.stencil = None;
-        // }
+        if data.enable_depth {
+            use gfx_hal::pso::{Comparison, DepthTest};
+
+            pipeline_desc.depth_stencil.depth = Some(DepthTest {
+                fun: Comparison::Less,
+                write: true,
+            });
+
+            pipeline_desc.depth_stencil.depth_bounds = false;
+            // Maybe that is the default... Who knows
+            pipeline_desc.depth_stencil.stencil = None;
+        }
 
         let pipeline = device.create_graphics_pipeline(&pipeline_desc, None)?;
 
