@@ -1,6 +1,6 @@
 use bincode::deserialize;
 use gfx_hal;
-use gfx_hal::adapter::{MemoryType, PhysicalDevice};
+use gfx_hal::adapter::PhysicalDevice;
 use gfx_hal::device::Device;
 use gfx_hal::memory::Requirements;
 use gfx_hal::MemoryTypeId;
@@ -35,7 +35,7 @@ impl<B: gfx_hal::Backend> Drop for Mesh<B> {
 pub type MeshError = Box<dyn Error>;
 
 pub fn load_teapot() -> Result<Vec<Vertex>, MeshError> {
-    let binary_mesh_data = include_bytes!("../../assets/meshes/teapot_mesh.bin");
+    let binary_mesh_data = include_bytes!("../../../assets/meshes/teapot_mesh.bin");
 
     let mut mesh: Vec<Vertex> = deserialize(binary_mesh_data)?;
     for vertex in mesh.iter_mut() {
@@ -70,8 +70,6 @@ pub unsafe fn make_buffer<B: gfx_hal::Backend>(
     usage: gfx_hal::buffer::Usage,
     properties: gfx_hal::memory::Properties,
 ) -> Result<(B::Memory, B::Buffer), MeshError> {
-    use gfx_hal::MemoryTypeId;
-
     let mut buffer = device.create_buffer(buffer_len as u64, usage)?;
 
     let req = device.get_buffer_requirements(&buffer);

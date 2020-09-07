@@ -106,7 +106,7 @@ impl Camera {
 
         // info!("position: {:?}", self.position);
 
-        let view_matrix = glm::look_at_rh(&self.position, &(self.position + view_dir), &up);
+        let view_matrix = glm::look_at_rh(&self.position, &(self.position.clone() + view_dir), &up);
 
         let projection_matrix =
             glm::perspective_rh_zo(self.aspect_ratio, f32::to_radians(45.0), 0.1, 100.0);
@@ -117,11 +117,10 @@ impl Camera {
 }
 
 fn get_move_dir(input: &KeyboardInput) -> Option<MoveDirection> {
-    use winit::event::ElementState;
     if let Some(key_code) = input.virtual_keycode {
         use winit::event::VirtualKeyCode::*;
-        if input.state == ElementState::Pressed {
-            return match key_code {
+        return if input.state == ElementState::Pressed {
+            match key_code {
                 W => Some(MoveDirection::Forward),
                 S => Some(MoveDirection::Backward),
                 A => Some(MoveDirection::Left),
@@ -130,14 +129,14 @@ fn get_move_dir(input: &KeyboardInput) -> Option<MoveDirection> {
                 RShift => Some(MoveDirection::Down),
                 Space => Some(MoveDirection::Up),
                 _ => None,
-            };
+            }
         } else {
             // -> Released
             let key_codes = vec![W, A, S, D, LShift, RShift, Space];
             if key_codes.contains(&key_code) {
-                return Some(MoveDirection::None);
+                Some(MoveDirection::None)
             } else {
-                return None;
+                None
             }
         }
     }

@@ -1,9 +1,10 @@
 mod camera;
-mod renderer;
 mod window;
+mod graphics;
 
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
+use graphics::renderer;
 
 use log::*;
 use simplelog;

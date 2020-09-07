@@ -153,7 +153,6 @@ fn build_pipeline<B: Backend>(
         // let pipeline_layout = device
         //     .create_pipeline_layout(&[], &)?;
 
-        use std::borrow::Borrow;
         use std::ops::Deref;
 
         let pipeline_layout = device.create_pipeline_layout(
@@ -167,7 +166,7 @@ fn build_pipeline<B: Backend>(
     let pipeline = unsafe {
         use gfx_hal::pass::Subpass;
         use gfx_hal::pso::{
-            BlendState, ColorBlendDesc, ColorMask, EntryPoint, Face, GraphicsPipelineDesc,
+            BlendState, ColorBlendDesc, ColorMask, EntryPoint, GraphicsPipelineDesc,
             GraphicsShaderSet, Primitive, Rasterizer, Specialization,
         };
 

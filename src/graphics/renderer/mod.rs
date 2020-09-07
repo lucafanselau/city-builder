@@ -5,7 +5,7 @@ mod ui;
 mod vertex;
 use crate::camera;
 use crate::renderer::shaders::ConstructData;
-use gfx_hal::pso::{AttributeDesc, Element, VertexBufferDesc, VertexInputRate};
+use gfx_hal::pso::VertexInputRate;
 use gfx_hal::{
     device::Device,
     format::Format,
@@ -464,7 +464,7 @@ impl<B: Backend> Renderer<B> {
 
     pub fn render(
         &mut self,
-        start_time: &Instant,
+        _start_time: &Instant,
         camera: &camera::Camera,
     ) -> Result<(), RenderError> {
         // The index for the in flight ressources

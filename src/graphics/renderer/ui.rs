@@ -1,6 +1,8 @@
 use imgui::{Context, DrawCmd, DrawCmdParams, DrawData, DrawIdx, DrawVert, ImString, Ui};
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 
+use log::*;
+
 use winit::{event::Event, window::Window};
 
 use gfx_hal::{Backend, IndexType};
@@ -13,14 +15,12 @@ use gfx_hal::command::CommandBuffer;
 use gfx_hal::device::Device;
 use gfx_hal::pool::CommandPool;
 use gfx_hal::pso::{
-    AttributeDesc, DescriptorPool, Element, ImageDescriptorType, Rect, VertexBufferDesc,
+    AttributeDesc, DescriptorPool, Element, Rect, VertexBufferDesc,
     VertexInputRate,
 };
 use gfx_hal::queue::CommandQueue;
 use nalgebra_glm as glm;
-use shaderc::ResourceKind::Sampler;use std::borrow::{Borrow, BorrowMut};
-use std::cell::{RefCell, RefMut};
-use std::fmt;
+use std::borrow::Borrow;
 use std::mem::ManuallyDrop;
 use std::{rc::Rc, sync::Arc, time::Instant};
 
@@ -52,15 +52,13 @@ impl<B: Backend> FontAtlasTexture<B> {
         let mut fonts = imgui.fonts();
         let texture = fonts.build_rgba32_texture();
 
-        use gfx_hal::adapter::PhysicalDevice;
-
         // 0. First we compute some memory related values.
         let pixel_size = 4; // By definition
-                            // let row_size = pixel_size * (texture.width as usize);
-                            // let limits = adapter.physical_device.limits();
-                            // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
-                            // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
-                            // debug_assert!(row_pitch as usize >= row_size);
+        // let row_size = pixel_size * (texture.width as usize);
+        // let limits = adapter.physical_device.limits();
+        // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
+        // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
+        // debug_assert!(row_pitch as usize >= row_size);
 
         // Create Staging Buffer
         let required_bytes = (texture.width * texture.height * pixel_size) as usize;
@@ -97,7 +95,7 @@ impl<B: Backend> FontAtlasTexture<B> {
         let (image, memory) = unsafe {
             use gfx_hal::{
                 format::Format,
-                image::{Kind, Level, Tiling, Usage, ViewCapabilities},
+                image::{Kind, Tiling, Usage, ViewCapabilities},
                 memory::Properties,
             };
 
@@ -331,8 +329,9 @@ impl<B: Backend> ImGuiRenderer<B> {
 
         {
             let hidpi_factor = platform.hidpi_factor();
+            info!("HIGH DPI Factor: {}", hidpi_factor);
             imgui.fonts().add_font(&[imgui::FontSource::TtfData {
-                data: include_bytes!("../../assets/fonts/FiraCode-Regular.ttf"),
+                data: include_bytes!("../../../assets/fonts/FiraCode-Regular.ttf"),
                 size_pixels: (13.0 * hidpi_factor) as f32,
                 config: None,
             }]);
@@ -553,8 +552,6 @@ impl<B: Backend> ImGuiRenderer<B> {
     }
 
     fn update_buffers(&self, draw_data: &DrawData, frame: &FrameData<B>) {
-        use log::error;
-
         if draw_data.total_vtx_count > VTX_COUNT as i32
             || draw_data.total_idx_count > IDX_COUNT as i32
         {
@@ -673,8 +670,6 @@ impl<B: Backend> ImGuiRenderer<B> {
     }
 
     pub fn render(&mut self, idx: usize, cmd: &mut B::CommandBuffer, shader: &ShaderSystem<B>) {
-        use gfx_hal::command::CommandBuffer;
-
         {
             let pipeline = shader
                 .get_pipeline("ui".to_string())
@@ -758,7 +753,6 @@ impl<B: Backend> ImGuiRenderer<B> {
     // }
 
     pub fn handle_event<T>(&mut self, event: &Event<T>) {
-        use std::borrow::Borrow;
         match event {
             Event::NewEvents(_) => {
                 self.last_frame = self
