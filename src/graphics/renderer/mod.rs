@@ -1,7 +1,7 @@
 // Here lives our Main Renderer separated into smaller parts, as I see fit
 mod shaders;
 use shaders::Pipeline;
-mod ui;
+pub mod ui;
 mod vertex;
 use crate::camera;
 use crate::renderer::shaders::ConstructData;
@@ -19,6 +19,8 @@ use log::*;
 use nalgebra_glm as glm;
 use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
 use winit::dpi::PhysicalSize;
+use crate::graphics::renderer::ui::UiHandle;
+use nalgebra_glm::Vec3;
 
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
@@ -462,10 +464,15 @@ impl<B: Backend> Renderer<B> {
         self.should_configure_swapchain = true;
     }
 
+    pub fn update(&mut self) -> UiHandle {
+        self.imgui.new_frame()
+    }
+
     pub fn render(
         &mut self,
         _start_time: &Instant,
         camera: &camera::Camera,
+        ui: UiHandle
     ) -> Result<(), RenderError> {
         // The index for the in flight ressources
         let frame_idx: usize = self.frame as usize % self.frames_in_flight as usize;
@@ -635,10 +642,8 @@ impl<B: Backend> Renderer<B> {
             }
 
             {
-                let mut pos = self.pos.clone();
+                let mut pos: glm::Vec3 = self.pos.clone();
                 let mut color = self.color.clone();
-
-                let ui = self.imgui.new_frame();
 
                 {
                     Window::new(im_str!("Hello world"))

@@ -11,7 +11,10 @@ use simplelog;
 
 use camera::Camera;
 
+use imgui::im_str;
+
 use gfx_backend_vulkan as back;
+use crate::graphics::renderer::ui::UiHandle;
 
 fn main() {
     let _logger = {
@@ -46,6 +49,8 @@ fn main() {
     window
         .set_cursor_grab(true)
         .expect("failed to set cursor grap");
+
+    let mut ui: Option<UiHandle> = None;
 
     event_loop.run(move |event, _, control_flow| {
         // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
@@ -91,12 +96,20 @@ fn main() {
                 previous_time = now;
 
                 camera.update(dt);
+                ui = Some(r.update());
+
+                if let Some(ui_ref) = ui.as_ref() {
+                    let ui_handle = &ui_ref.ui;
+                    imgui::Window::new(im_str!("Game")).build(ui_handle, || {
+                        ui_handle.text(im_str!("Auch von hier HIII!"));
+                    })
+                }
 
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
                 // Here happens rendering
-                match r.render(&start_time, &camera) {
+                match r.render(&start_time, &camera, ui.take().expect("failed to get ui")) {
                     Ok(_) => (),
                     Err(e) => {
                         error!("Renderer: Rendering Failed");
