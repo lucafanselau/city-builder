@@ -11,12 +11,28 @@ use simplelog;
 
 use camera::Camera;
 
-use imgui::im_str;
+use imgui::{im_str, Slider};
 
 use gfx_backend_vulkan as back;
 use crate::graphics::renderer::ui::UiHandle;
 
+use ecs;
+
 fn main() {
+    let _logger = {
+        use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
+
+        let config = ConfigBuilder::new()
+            .set_location_level(LevelFilter::Warn)
+            .build();
+
+        TermLogger::init(LevelFilter::max(), config, TerminalMode::Mixed).unwrap()
+    };
+
+    ecs::test_the_shit();
+}
+
+fn old_main() {
     let _logger = {
         use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
 
@@ -95,15 +111,24 @@ fn main() {
                 let dt = now.duration_since(previous_time).as_secs_f32();
                 previous_time = now;
 
-                camera.update(dt);
                 ui = Some(r.update());
 
+
                 if let Some(ui_ref) = ui.as_ref() {
+
+                    let mut camera_pos = camera.position;
+
                     let ui_handle = &ui_ref.ui;
                     imgui::Window::new(im_str!("Game")).build(ui_handle, || {
                         ui_handle.text(im_str!("Auch von hier HIII!"));
-                    })
+                        Slider::new(im_str!("Pos X"), -10.0..=10.0).build_array(ui_handle, camera_pos.as_mut_slice());
+                    });
+
+                    camera.position = camera_pos;
                 }
+
+
+                camera.update(dt);
 
                 window.request_redraw();
             }

@@ -21,7 +21,7 @@ pub struct CameraData {
 #[derive(Debug)]
 pub struct Camera {
     pub data: Option<glm::Mat4>,
-    position: glm::Vec3,
+    pub position: glm::Vec3,
     // view_dir: glm::Vec3,
     yaw: f32, // In degrees
     pitch: f32,

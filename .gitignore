@@ -1,4 +1,6 @@
 /target
 
+/.idea
+
 # Lock File
 Cargo.lock
