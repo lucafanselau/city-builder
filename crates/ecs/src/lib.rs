@@ -1,4 +1,5 @@
 mod into_system;
+mod resources;
 mod system;
 
 use crate::into_system::IntoFunctionSystem;
@@ -86,5 +87,22 @@ mod tests {
             .expect("failed to get position of b");
         assert_eq!(position_b.x, -6.0);
         assert_eq!(position_b.y, 1.0);
+    }
+
+    #[test]
+    fn optional_component() {
+        let mut world = hecs::World::new();
+
+        let a = world.spawn(
+            hecs::EntityBuilder::new()
+                .add(Position { x: 1.2, y: 3.6 })
+                .build(),
+        );
+        let b = world.spawn((Position { x: 1.2, y: 3.6 }, true));
+
+        assert_eq!(
+            world.query::<(&Position, Option<&bool>)>().iter().count(),
+            2
+        );
     }
 }

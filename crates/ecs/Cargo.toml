@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 log = "0.4.11"
 hecs = "0.2.15"
+thiserror = "1.0.20"
+anyhow = "1.0.32"
