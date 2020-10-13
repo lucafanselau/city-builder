@@ -1,3 +1,7 @@
+// Used to reduce code repetition
+// if there are drawbacks, we might need to remove that
+#![feature(trait_alias)]
+
 mod into_system;
 mod resources;
 mod system;
@@ -39,7 +43,7 @@ fn entity_bundle(x: f32, y: f32, dx: f32, dy: f32) -> (Position, Velocity) {
     (Position { x, y }, Velocity { dx, dy })
 }
 
-fn my_first_system(mut query: hecs::QueryBorrow<(&mut Position, &Velocity)>) {
+/*fn my_first_system(mut query: hecs::QueryBorrow<(&mut Position, &Velocity)>) {
     for (_e, (p, v)) in query.iter() {
         p.x += v.dx;
         p.y += v.dy;
@@ -52,15 +56,15 @@ where
 {
     fn into_system(self) -> Box<dyn System> {
         Box::new(FunctionSystem::new(
-            move |world| self(world.query()),
+            move |world, resources| self(world.query()),
             Cow::from("my_first_system"),
         ))
     }
-}
+}*/
 
 #[cfg(test)]
 mod tests {
-    use crate::{entity_bundle, my_first_system, Position};
+    use crate::{entity_bundle, Position, Velocity};
 
     #[test]
     fn add_system() {
@@ -72,9 +76,9 @@ mod tests {
         let b = world.spawn(entity_bundle(-5.0, 2.0, -1.0, -1.0));
 
         use crate::into_system::IntoFunctionSystem;
-        let my_system = my_first_system.into_system();
+        // let my_system = my_first_system.into_system();
 
-        my_system.run(&world);
+        // my_system.run(&world);
 
         let position_a = world
             .get::<Position>(a)
@@ -104,5 +108,60 @@ mod tests {
             world.query::<(&Position, Option<&bool>)>().iter().count(),
             2
         );
+    }
+
+    struct ExecutionCounter(u32);
+
+    use std::any::Any;
+    use std::borrow::Cow;
+    use std::cell::{Ref, RefMut};
+
+    fn second_system(
+        exec: RefMut<ExecutionCounter>,
+        mut query: hecs::QueryBorrow<(&mut Position, &Velocity)>,
+    ) {
+        // first increase the execution counter
+        exec.0 += 1;
+        // Then iterate over entities
+        for (_e, (p, v)) in query.iter() {
+            p.x += v.dx;
+            p.y += v.dy;
+        }
+    }
+
+    impl<Func, Resource, Query> super::IntoFunctionSystem<Resource, Query> for Func
+    where
+        Func: Fn(RefMut<Resource>, Query) + Fn(Resource, Query) + 'static,
+        Resource: Any + 'static,
+        Query: hecs::Query,
+    {
+        fn into_system(self) -> Box<dyn super::System> {
+            Box::new(super::FunctionSystem::new(
+                move |world| self(world.query()),
+                Cow::from("my_first_system"),
+            ))
+        }
+    }
+
+    impl<Func, Resource, Rb, Query> super::IntoFunctionSystem<(Resource, Rb), Query> for Func
+    where
+        Func: Fn(RefMut<Resource>, Ref<Rb>, Query) + Fn(Resource, Rb, Query) + 'static,
+        Resource: Any + 'static,
+        Rb: Any + 'static,
+        Query: hecs::Query,
+    {
+        fn into_system(self) -> Box<dyn super::System> {
+            Box::new(super::FunctionSystem::new(
+                move |world| self(world.query()),
+                Cow::from("my_first_system"),
+            ))
+        }
+    }
+
+    #[test]
+    fn a_resource_system() {
+        let mut resources = crate::resources::Resources::new();
+        // First we push back a resource
+        resources.insert(ExecutionCounter(0));
     }
 }

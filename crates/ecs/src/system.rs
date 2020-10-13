@@ -1,33 +1,38 @@
-use std::borrow::Cow;
+use crate::resources::Resources;
 use hecs;
 use hecs::World;
+use std::borrow::Cow;
 
 pub trait System {
     fn name(&self) -> Cow<'static, str>;
-    fn run(&self, world: &hecs::World);
+    fn run(&self, world: &hecs::World, resources: &Resources);
 }
 
-pub struct FunctionSystem<Func> where Func: Fn(&hecs::World) + 'static {
+pub trait FunctionSystemCallback = Fn(&hecs::World, &Resources) + 'static;
+
+pub struct FunctionSystem<Func>
+where
+    Func: FunctionSystemCallback,
+{
     callback: Func,
-    name: Cow<'static, str>
+    name: Cow<'static, str>,
 }
 
-impl<Func: Fn(&hecs::World) + 'static> FunctionSystem<Func> {
+impl<Func: FunctionSystemCallback> FunctionSystem<Func> {
     pub fn new(func: Func, name: Cow<'static, str>) -> Self {
         FunctionSystem {
             callback: func,
-            name: name.clone()
+            name: name.clone(),
         }
     }
 }
 
-impl <Func: Fn(&hecs::World) + 'static> System for FunctionSystem<Func> {
+impl<Func: FunctionSystemCallback> System for FunctionSystem<Func> {
     fn name(&self) -> Cow<'static, str> {
         self.name.clone()
     }
 
-    fn run(&self, world: &World) {
-        (self.callback)(world)
+    fn run(&self, world: &World, resources: &Resources) {
+        (self.callback)(world, resources);
     }
 }
-

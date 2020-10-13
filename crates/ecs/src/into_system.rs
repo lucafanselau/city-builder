@@ -2,6 +2,6 @@
 
 use crate::system::System;
 
-pub trait IntoFunctionSystem {
+pub trait IntoFunctionSystem<Resources, Q> {
     fn into_system(self) -> Box<dyn System>;
 }
