@@ -1,4 +1,4 @@
-use crate::resources::Resources;
+use crate::resource::Resources;
 use hecs;
 use hecs::World;
 use std::borrow::Cow;
@@ -19,6 +19,8 @@ where
 }
 
 impl<Func: FunctionSystemCallback> FunctionSystem<Func> {
+    // TODO: Remove
+    #[allow(dead_code)]
     pub fn new(func: Func, name: Cow<'static, str>) -> Self {
         FunctionSystem {
             callback: func,

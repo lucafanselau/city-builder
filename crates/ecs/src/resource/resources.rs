@@ -1,9 +1,13 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::error::Error;
 
+use crate::resource::{ResourceCreator, ResourceQuery};
 use std::cell::{Ref, RefCell, RefMut};
 use thiserror::Error;
+
+// Resource type
+pub trait Resource: Any + 'static {}
+impl<T: Any + 'static> Resource for T {}
 
 // Basically a Map that provides a centralised storage for Resources
 pub struct Resources {
@@ -33,7 +37,7 @@ impl Resources {
         }
     }
 
-    pub fn insert<T: 'static>(&mut self, initial: T) -> Result<(), InsertResourceError> {
+    pub fn insert<T: Resource>(&mut self, initial: T) -> Result<(), InsertResourceError> {
         let type_id = TypeId::of::<T>();
         if self.storage.contains_key(&type_id) {
             Err(InsertResourceError::DuplicateResource(type_id))
@@ -44,9 +48,8 @@ impl Resources {
         }
     }
 
-    pub fn get<T: 'static>(&self) -> Result<Ref<T>, GetResourceError> {
+    pub fn get<T: Resource>(&self) -> Result<Ref<T>, GetResourceError> {
         let type_id = TypeId::of::<T>();
-
         let store = self
             .storage
             .get(&type_id)
@@ -56,7 +59,7 @@ impl Resources {
         Ok(store.borrow())
     }
 
-    pub fn get_mut<T: 'static>(&self) -> Result<RefMut<T>, GetResourceError> {
+    pub fn get_mut<T: Resource>(&self) -> Result<RefMut<T>, GetResourceError> {
         let type_id = TypeId::of::<T>();
         let store = self
             .storage
@@ -65,6 +68,13 @@ impl Resources {
             .downcast_ref::<RefCell<T>>()
             .ok_or(GetResourceError::DowncastFailed)?;
         Ok(store.borrow_mut())
+    }
+
+    // TODO: Return type
+    pub fn query<Q: ResourceQuery>(
+        &self,
+    ) -> Option<<<Q as ResourceQuery>::Creator as ResourceCreator>::Item> {
+        <Q as ResourceQuery>::Creator::create(&self)
     }
 }
 
@@ -88,11 +98,11 @@ mod tests {
         let my_resource = MyResource {
             counter: INITIAL_COUNTER,
         };
-        resource.insert(my_resource);
+        resource.insert(my_resource).expect("");
         let my_second_resource = MySecondResource {
             also_a_fucking_counter: SECOND_INITIAL_COUNTER,
         };
-        resource.insert(my_second_resource);
+        resource.insert(my_second_resource).expect("");
         resource
     }
 
@@ -108,7 +118,7 @@ mod tests {
 
     #[test]
     fn mutable_resource() {
-        let mut resource = test_setup();
+        let resource = test_setup();
         // and modify that
         {
             let mut my_mut_ref = resource
@@ -157,8 +167,41 @@ mod tests {
     #[should_panic]
     fn to_many_borrows() {
         let resources = test_setup();
-        let mut one = resources.get_mut::<MyResource>().unwrap();
+        let _one = resources.get_mut::<MyResource>().unwrap();
         // now this should panic
-        let mut two = resources.get_mut::<MyResource>().unwrap();
+        let _two = resources.get_mut::<MyResource>().unwrap();
+    }
+
+    #[test]
+    fn resource_query() {
+        let resources = test_setup();
+        // The point is, that we should be able to have a resource_query that handles the ref creation
+        {
+            let mut resource = resources.query::<RefMut<MyResource>>().unwrap();
+            resource.counter += 1;
+        }
+        let resource = resources.query::<Ref<MyResource>>().unwrap();
+        assert_eq!(resource.counter, INITIAL_COUNTER + 1);
+    }
+
+    #[test]
+    fn multiple_resource_query() {
+        let resources = test_setup();
+        // Now we are getting two resources at the same time
+        {
+            let (mut first, mut second) = resources
+                .query::<(RefMut<MyResource>, RefMut<MySecondResource>)>()
+                .unwrap();
+            first.counter *= 2;
+            second.also_a_fucking_counter *= 2;
+        }
+        // And now check that
+        {
+            let (first, second) = resources
+                .query::<(Ref<MyResource>, Ref<MySecondResource>)>()
+                .unwrap();
+            assert_eq!(first.counter, INITIAL_COUNTER * 2);
+            assert_eq!(second.also_a_fucking_counter, SECOND_INITIAL_COUNTER * 2);
+        }
     }
 }
