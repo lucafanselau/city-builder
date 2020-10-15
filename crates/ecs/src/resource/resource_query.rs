@@ -44,24 +44,27 @@ impl<'a, R: Resource> ResourceCreator<'a> for MutableResourceCreator<R> {
 }
 
 macro_rules! impl_query_tuple {
-    (()) => {};
+    (($($R:ident),*)) => {
+        impl<'a, $($R: ResourceQuery, )*> ResourceCreator<'a> for ($($R,)*) {
+            type Item = (
+                $(<<$R as ResourceQuery>::Creator as ResourceCreator<'a>>::Item,)*
+            );
+
+            fn create(resources: &'a Resources) -> Option<Self::Item> {
+                Some((
+                    $($R::Creator::create(resources)?,)*
+                ))
+            }
+        }
+
+        impl<'a, $($R: ResourceQuery, )*> ResourceQuery for ($($R,)*) {
+            type Creator = ($($R,)*);
+        }
+    };
 }
 
-// Impl for tuple type, should be basis for macro_rules thingy (because we want tuples of arbitrary size)
-impl<'a, Ra: ResourceQuery, Rb: ResourceQuery> ResourceCreator<'a> for (Ra, Rb) {
-    type Item = (
-        <<Ra as ResourceQuery>::Creator as ResourceCreator<'a>>::Item,
-        <<Rb as ResourceQuery>::Creator as ResourceCreator<'a>>::Item,
-    );
-
-    fn create(resources: &'a Resources) -> Option<Self::Item> {
-        Some((
-            Ra::Creator::create(resources)?,
-            Rb::Creator::create(resources)?,
-        ))
-    }
-}
-
-impl<'a, Ra: ResourceQuery, Rb: ResourceQuery> ResourceQuery for (Ra, Rb) {
-    type Creator = (Ra, Rb);
-}
+// This might be extended (or maybe even make a macro for that
+impl_query_tuple!((Ra, Rb));
+impl_query_tuple!((Ra, Rb, Rc));
+impl_query_tuple!((Ra, Rb, Rc, Rd));
+impl_query_tuple!((Ra, Rb, Rc, Rd, Re));

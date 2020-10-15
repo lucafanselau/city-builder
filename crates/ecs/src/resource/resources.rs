@@ -204,4 +204,25 @@ mod tests {
             assert_eq!(second.also_a_fucking_counter, SECOND_INITIAL_COUNTER * 2);
         }
     }
+
+    #[test]
+    fn large_queries() {
+        let resources = {
+            let mut resources = Resources::new();
+            resources.insert(1u32).unwrap();
+            resources.insert(2i16).unwrap();
+            resources.insert(true).unwrap();
+            resources.insert("Hello world".to_string()).unwrap();
+            resources
+        };
+
+        // Now to the large query
+        let (unsigned, signed, boolean, string) = resources
+            .query::<(Ref<u32>, Ref<i16>, Ref<bool>, Ref<String>)>()
+            .unwrap();
+        assert_eq!(*unsigned, 1);
+        assert_eq!(*signed, 2);
+        assert_eq!(*boolean, true);
+        assert_eq!(string.as_str(), "Hello world");
+    }
 }
