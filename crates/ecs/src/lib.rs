@@ -2,7 +2,6 @@
 // if there are drawbacks, we might need to remove that
 #![feature(trait_alias)]
 
-mod into_system;
 mod resource;
 mod system;
 
