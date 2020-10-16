@@ -1,4 +1,4 @@
-mod into_system;
+pub mod into_system;
 mod system;
 
 pub use system::*;

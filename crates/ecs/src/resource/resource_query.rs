@@ -50,6 +50,7 @@ macro_rules! impl_query_tuple {
                 $(<<$R as ResourceQuery>::Creator as ResourceCreator<'a>>::Item,)*
             );
 
+            #[allow(unused_variables)]
             fn create(resources: &'a Resources) -> Option<Self::Item> {
                 Some((
                     $($R::Creator::create(resources)?,)*
@@ -64,6 +65,7 @@ macro_rules! impl_query_tuple {
 }
 
 // This might be extended (or maybe even make a macro for that
+impl_query_tuple!(());
 impl_query_tuple!((Ra));
 impl_query_tuple!((Ra, Rb));
 impl_query_tuple!((Ra, Rb, Rc));

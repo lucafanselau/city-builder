@@ -134,6 +134,7 @@ impl Scheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hecs::QueryBorrow;
 
     #[test]
     fn simple_schedule() {
@@ -168,5 +169,19 @@ mod tests {
         scheduler.add_stage("UPDATE");
         // THIS SHOULD PANIC
         scheduler.add_stage("UPDATE");
+    }
+
+    fn a_system(_query: QueryBorrow<&i32>) {}
+
+    use crate::system::into_system::IntoFunctionSystem;
+
+    #[test]
+    fn add_a_system() {
+        let mut scheduler = Scheduler::new();
+        scheduler.add_stage("TEST");
+        scheduler.add_system_to_stage("TEST", a_system.into_system());
+        assert_eq!(scheduler.order, ["TEST"]);
+        assert!(scheduler.stages.contains_key("TEST"));
+        assert_eq!(scheduler.stages.get("TEST").unwrap().len(), 1)
     }
 }
