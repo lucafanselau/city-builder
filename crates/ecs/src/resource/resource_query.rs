@@ -64,6 +64,7 @@ macro_rules! impl_query_tuple {
 }
 
 // This might be extended (or maybe even make a macro for that
+impl_query_tuple!((Ra));
 impl_query_tuple!((Ra, Rb));
 impl_query_tuple!((Ra, Rb, Rc));
 impl_query_tuple!((Ra, Rb, Rc, Rd));
