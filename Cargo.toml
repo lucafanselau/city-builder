@@ -27,7 +27,7 @@ uuid = { version = "0.8", features = ["v4"] }
 anyhow = "1.0.32"
 thiserror = "1.0.20"
 
-ecs = { path = "crates/ecs"}
+ecs = { path = "crates/ecs" }
 
 # IMGUI
 imgui = "0.4.0"
