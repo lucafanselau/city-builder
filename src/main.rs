@@ -1,10 +1,10 @@
 mod camera;
-mod window;
 mod graphics;
+mod window;
 
+use graphics::renderer;
 use winit::event::{ElementState, Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
-use graphics::renderer;
 
 use log::*;
 use simplelog;
@@ -13,10 +13,12 @@ use camera::Camera;
 
 use imgui::{im_str, Slider};
 
-use gfx_backend_vulkan as back;
 use crate::graphics::renderer::ui::UiHandle;
+use gfx_backend_vulkan as back;
 
-use ecs;
+use ecs::prelude::*;
+use render;
+use std::borrow::Borrow;
 
 fn main() {
     let _logger = {
@@ -29,7 +31,17 @@ fn main() {
         TermLogger::init(LevelFilter::max(), config, TerminalMode::Mixed).unwrap()
     };
 
-    ecs::test_the_shit();
+    let schedule = {
+        let s = Scheduler::new();
+        s
+    };
+
+    let window_size = winit::dpi::LogicalSize::new(1600, 900);
+
+    let (event_loop, window) =
+        window::create_window("Mightycity", window_size).expect("failed to create a window");
+
+    let ctx = render::context::create_render_context::<winit::window::Window>(window.borrow());
 }
 
 fn old_main() {
@@ -113,20 +125,18 @@ fn old_main() {
 
                 ui = Some(r.update());
 
-
                 if let Some(ui_ref) = ui.as_ref() {
-
                     let mut camera_pos = camera.position;
 
                     let ui_handle = &ui_ref.ui;
                     imgui::Window::new(im_str!("Game")).build(ui_handle, || {
                         ui_handle.text(im_str!("Auch von hier HIII!"));
-                        Slider::new(im_str!("Pos X"), -10.0..=10.0).build_array(ui_handle, camera_pos.as_mut_slice());
+                        Slider::new(im_str!("Pos X"), -10.0..=10.0)
+                            .build_array(ui_handle, camera_pos.as_mut_slice());
                     });
 
                     camera.position = camera_pos;
                 }
-
 
                 camera.update(dt);
 

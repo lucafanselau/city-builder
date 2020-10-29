@@ -15,8 +15,7 @@ use gfx_hal::command::CommandBuffer;
 use gfx_hal::device::Device;
 use gfx_hal::pool::CommandPool;
 use gfx_hal::pso::{
-    AttributeDesc, DescriptorPool, Element, Rect, VertexBufferDesc,
-    VertexInputRate,
+    AttributeDesc, DescriptorPool, Element, Rect, VertexBufferDesc, VertexInputRate,
 };
 use gfx_hal::queue::CommandQueue;
 use nalgebra_glm as glm;
@@ -54,11 +53,11 @@ impl<B: Backend> FontAtlasTexture<B> {
 
         // 0. First we compute some memory related values.
         let pixel_size = 4; // By definition
-        // let row_size = pixel_size * (texture.width as usize);
-        // let limits = adapter.physical_device.limits();
-        // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
-        // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
-        // debug_assert!(row_pitch as usize >= row_size);
+                            // let row_size = pixel_size * (texture.width as usize);
+                            // let limits = adapter.physical_device.limits();
+                            // let row_alignment_mask = limits.optimal_buffer_copy_pitch_alignment as u32 - 1;
+                            // let row_pitch = ((row_size as u32 + row_alignment_mask) & !row_alignment_mask) as usize;
+                            // debug_assert!(row_pitch as usize >= row_size);
 
         // Create Staging Buffer
         let required_bytes = (texture.width * texture.height * pixel_size) as usize;

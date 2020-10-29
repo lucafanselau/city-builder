@@ -11,7 +11,10 @@ impl HandleId {
     }
 }
 
-pub struct Handle<T> where T: 'static {
+pub struct Handle<T>
+where
+    T: 'static,
+{
     id: HandleId,
     data: PhantomData<T>,
 }

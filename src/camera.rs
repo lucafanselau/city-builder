@@ -138,7 +138,7 @@ fn get_move_dir(input: &KeyboardInput) -> Option<MoveDirection> {
             } else {
                 None
             }
-        }
+        };
     }
     None
 }

@@ -1,0 +1,14 @@
+[package]
+name = "render"
+version = "0.1.0"
+authors = ["Luca Fanselau <luca.fanselau@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4.11"
+generational-arena = "0.2.8"
+raw-window-handle = "0.3.3"
+gfx-hal = "0.6.0"
+gfx-backend-vulkan = "0.6.5"

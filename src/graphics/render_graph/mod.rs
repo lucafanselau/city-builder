@@ -1,2 +1,2 @@
-mod node;
 mod graph;
+mod node;

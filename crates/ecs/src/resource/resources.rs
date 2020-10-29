@@ -225,4 +225,17 @@ mod tests {
         assert_eq!(*boolean, true);
         assert_eq!(string.as_str(), "Hello world");
     }
+
+    struct MyGenericResource<T>(T);
+
+    #[test]
+    fn generic_resource() {
+        let mut resources = Resources::new();
+
+        resources.insert(MyGenericResource(37i32)).unwrap();
+        resources.insert(MyGenericResource(1024i16)).unwrap();
+
+        assert_eq!(resources.get::<MyGenericResource<i32>>().unwrap().0, 37);
+        assert_eq!(resources.get::<MyGenericResource<i16>>().unwrap().0, 1024);
+    }
 }

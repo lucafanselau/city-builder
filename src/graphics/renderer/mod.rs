@@ -4,6 +4,7 @@ use shaders::Pipeline;
 pub mod ui;
 mod vertex;
 use crate::camera;
+use crate::graphics::renderer::ui::UiHandle;
 use crate::renderer::shaders::ConstructData;
 use gfx_hal::pso::VertexInputRate;
 use gfx_hal::{
@@ -17,10 +18,9 @@ use gfx_hal::{
 use imgui::{im_str, ColorPicker, Condition, Slider, Window};
 use log::*;
 use nalgebra_glm as glm;
+use nalgebra_glm::Vec3;
 use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
 use winit::dpi::PhysicalSize;
-use crate::graphics::renderer::ui::UiHandle;
-use nalgebra_glm::Vec3;
 
 type InitError = Box<dyn Error>;
 type RenderError = Box<dyn Error>;
@@ -254,8 +254,8 @@ impl<B: Backend> Renderer<B> {
 
         // Add our default triangle shader
         {
+            use crate::renderer::shaders::{create_attribute_desc, create_vertex_buffer_desc};
             use gfx_hal::pso::ShaderStageFlags;
-            use crate::renderer::shaders::{create_vertex_buffer_desc, create_attribute_desc};
 
             let push_constant_bytes = std::mem::size_of::<PushConstants>() as u32;
 
@@ -472,7 +472,7 @@ impl<B: Backend> Renderer<B> {
         &mut self,
         _start_time: &Instant,
         camera: &camera::Camera,
-        ui: UiHandle
+        ui: UiHandle,
     ) -> Result<(), RenderError> {
         // The index for the in flight ressources
         let frame_idx: usize = self.frame as usize % self.frames_in_flight as usize;

@@ -1,9 +1,5 @@
-struct RenderGraph {
-
-}
+struct RenderGraph {}
 
 impl RenderGraph {
-    pub fn new() {
-
-    }
+    pub fn new() {}
 }
