@@ -1,4 +1,6 @@
 pub mod context;
+pub mod gfx;
+pub mod resource;
 
 /// This is where we want to go (at least) roughly with our implementation
 // struct Graph {}
@@ -48,7 +50,7 @@ fn vision() {
     // // like context.update_buffer<T: IntoRenderResource>(buffer, new: T)
     // let sun_camera = frame_graph.add_node(DynamicAssetNode::new(
     //     ""
-    //     buffer, /*Of maybe like a type or buffer (with PhantomMarker)*/
+    //     buffer /*Of maybe like a type or buffer (with PhantomMarker)*/
     // ));
     //
     // let depth_attachment = frame_graph.create_depth_attachment(GraphAttachment::DepthAttachment {

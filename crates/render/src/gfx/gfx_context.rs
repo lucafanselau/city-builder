@@ -1,8 +1,10 @@
-use crate::context::types::BufferHandle;
-use crate::context::RenderContext;
-use gfx_hal::{queue::QueueGroup, Backend};
+use crate::context::GpuContext;
+use crate::gfx::heapy::Heapy;
+use crate::resource::buffer::BufferDescriptor;
+use gfx_hal::{device::Device, Backend};
 use log::debug;
 use std::mem::ManuallyDrop;
+use std::sync::Arc;
 
 #[derive(Debug)]
 struct Queues<B: Backend> {
@@ -12,18 +14,20 @@ struct Queues<B: Backend> {
 
 /// This is the GFX-hal implementation of the Rendering Context described in mod.rs
 #[derive(Debug)]
-pub struct GfxRenderContext<B: Backend>
+pub struct GfxContext<B: Backend>
 where
     B::Device: Send + Sync,
 {
     instance: B::Instance,
-    device: B::Device,
+    device: Arc<B::Device>,
     adapter: gfx_hal::adapter::Adapter<B>,
     surface: ManuallyDrop<B::Surface>,
     queues: Queues<B>,
+    // Memory managment
+    heapy: Heapy<B>,
 }
 
-impl<B: Backend> GfxRenderContext<B> {
+impl<B: Backend> GfxContext<B> {
     pub fn new(window_handle: &impl raw_window_handle::HasRawWindowHandle) -> Self {
         use gfx_hal::{adapter::Gpu, queue::QueueFamily, Instance};
 
@@ -63,7 +67,7 @@ impl<B: Backend> GfxRenderContext<B> {
 
         let (device, queues) = {
             // need to find the queue_family
-            let mut families = &adapter.queue_families;
+            let families = &adapter.queue_families;
 
             let graphics_family = families
                 .iter()
@@ -74,7 +78,9 @@ impl<B: Backend> GfxRenderContext<B> {
 
             let compute_family = families
                 .iter()
-                .find(|family| family.queue_type().supports_compute())
+                .find(|family| {
+                    family.queue_type().supports_compute() && family.id() != graphics_family.id()
+                })
                 .expect("couldn't find compute queue_family");
 
             let (device, queue_groups) = unsafe {
@@ -109,8 +115,10 @@ impl<B: Backend> GfxRenderContext<B> {
                 compute: compute_family.queues.remove(0),
             };
 
-            (device, queues)
+            (Arc::new(device), queues)
         };
+
+        let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
 
         Self {
             instance,
@@ -118,12 +126,29 @@ impl<B: Backend> GfxRenderContext<B> {
             adapter,
             device,
             queues,
+            heapy,
         }
     }
 }
 
-impl<B: Backend> RenderContext for GfxRenderContext<B> {
-    fn create_initialized_buffer(&self) -> BufferHandle {
-        unimplemented!()
+impl<B: Backend> GpuContext for GfxContext<B> {
+    type BufferHandle = B::Buffer;
+
+    fn create_buffer(&self, desc: BufferDescriptor) -> Self::BufferHandle {
+        unsafe {
+            match self.device.create_buffer(desc.size, desc.usage) {
+                Ok(buffer) => buffer,
+                Err(err) => panic!(
+                    "[GfxContext] failed to create buffer [{}]: {:#?}",
+                    desc.name, err
+                ),
+            }
+        }
+    }
+
+    fn drop_buffer(&self, buffer: Self::BufferHandle) {
+        unsafe {
+            self.device.destroy_buffer(buffer);
+        }
     }
 }
