@@ -18,7 +18,7 @@ use gfx_hal::{
 use imgui::{im_str, ColorPicker, Condition, Slider, Window};
 use log::*;
 use nalgebra_glm as glm;
-use nalgebra_glm::Vec3;
+
 use std::{error::Error, mem::ManuallyDrop, rc::Rc, sync::Arc, time::Instant};
 use winit::dpi::PhysicalSize;
 

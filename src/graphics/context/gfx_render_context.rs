@@ -4,7 +4,7 @@ use gfx_hal::adapter::PhysicalDevice;
 use gfx_hal::queue::{QueueFamily, QueueGroup};
 use gfx_hal::{Backend, Instance};
 use log::*;
-use std::error::Error;
+
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -58,9 +58,9 @@ impl<B: Backend> GfxRenderContext<B> {
             .expect("couldn't find suitable adapter");
         debug!("Selected: {:?}", adapter.info);
 
-        let (device, mut queue_group) = {
+        let (device, queue_group) = {
             // need to find the queue_family
-            let mut families = &adapter.queue_families;
+            let families = &adapter.queue_families;
 
             let graphics_family = families
                 .iter()
@@ -74,7 +74,7 @@ impl<B: Backend> GfxRenderContext<B> {
                 .find(|family| family.queue_type().supports_compute())
                 .expect("couldn't find compute queue_family");
 
-            let mut gpu = unsafe {
+            let gpu = unsafe {
                 use gfx_hal::adapter::PhysicalDevice;
 
                 adapter

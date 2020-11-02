@@ -31,17 +31,17 @@ fn main() {
         TermLogger::init(LevelFilter::max(), config, TerminalMode::Mixed).unwrap()
     };
 
-    let schedule = {
+    let _schedule = {
         let s = Scheduler::new();
         s
     };
 
     let window_size = winit::dpi::LogicalSize::new(1600, 900);
 
-    let (event_loop, window) =
+    let (_event_loop, window) =
         window::create_window("Mightycity", window_size).expect("failed to create a window");
 
-    let ctx = render::context::create_render_context::<winit::window::Window>(window.borrow());
+    let _ctx = render::context::create_render_context::<winit::window::Window>(window.borrow());
 }
 
 fn old_main() {
