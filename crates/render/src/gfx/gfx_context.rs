@@ -4,6 +4,7 @@ use crate::resource::buffer::BufferDescriptor;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -119,6 +120,32 @@ impl<B: Backend> GfxContext<B> {
         };
 
         let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
+
+        let mut buffer = unsafe {
+            use gfx_hal::buffer::Usage;
+            device
+                .create_buffer(48, Usage::TRANSFER_DST | Usage::UNIFORM)
+                .expect("failed to create test buffer")
+        };
+
+        let requirements = unsafe { device.get_buffer_requirements(&buffer) };
+
+        use crate::gfx::heapy::MemoryType;
+        let allocation = heapy.alloc(
+            requirements.size,
+            MemoryType::DeviceLocal,
+            Some(requirements),
+        );
+
+        heapy.bind_buffer(allocation, &mut buffer);
+
+        // Here the buffer has a beautiful life
+
+        // now we should delete the buffer first and then deallocate
+        unsafe {
+            device.destroy_buffer(buffer);
+        }
+        heapy.deallocate(allocation);
 
         Self {
             instance,

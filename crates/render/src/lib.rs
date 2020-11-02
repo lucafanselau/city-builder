@@ -1,3 +1,5 @@
+#![feature(is_sorted)]
+
 pub mod context;
 pub mod gfx;
 pub mod resource;
