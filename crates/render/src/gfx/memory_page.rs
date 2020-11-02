@@ -101,11 +101,11 @@ impl Allocations {
         // Expect that allocations is sorted
         debug_assert!(self.allocations.is_sorted());
         // And every allocation is compatible
-        debug_assert!(self.allocations.iter().all(|a| {
-            self.allocations
-                .iter()
-                .all(|b| b.eq(a) || Self::is_compatible(a.into(), b.into()))
-        }));
+        // debug_assert!(self.allocations.iter().all(|a| {
+        //     self.allocations
+        //         .iter()
+        //         .all(|b| b.eq(a) || Self::is_compatible(a.into(), b.into()))
+        // }));
         for a in self.allocations.iter() {
             if !Self::is_compatible(head..head + allocation_size, a.into()) {
                 // meaning a and the possible new allocation are incompatible
@@ -121,13 +121,13 @@ impl Allocations {
             let pos = self.allocations.binary_search(&allocation).err().unwrap();
             self.allocations.insert(pos, allocation);
             // Expect that allocations is sorted
-            debug_assert!(self.allocations.is_sorted());
+            // debug_assert!(self.allocations.is_sorted());
             // And every allocation is compatible
-            debug_assert!(self.allocations.iter().all(|a| {
-                self.allocations
-                    .iter()
-                    .all(|b| b.eq(a) || Self::is_compatible(a.into(), b.into()))
-            }));
+            // debug_assert!(self.allocations.iter().all(|a| {
+            //     self.allocations
+            //         .iter()
+            //         .all(|b| b.eq(a) || Self::is_compatible(a.into(), b.into()))
+            // }));
             Ok(head)
         } else {
             Err(AllocationError::OutOfMemory)
@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn alloc() {
+    fn first_allocation() {
         let mut a = Allocations::new(24);
         let _first = unsafe { a.try_alloc(4) }.expect("failed first");
         let second = unsafe { a.try_alloc(8) }.expect("failed second");
@@ -169,45 +169,26 @@ mod tests {
         a.dealloc(second);
         assert_eq!(a.allocations, vec![al(4, 0), al(4, 12), al(8, 16)]);
     }
+
+    #[test]
+    fn multiple_allocations() {
+        let mut a = Allocations::new(24);
+        let _first = unsafe { a.try_alloc(4) }.expect("failed first");
+        let second = unsafe { a.try_alloc(8) }.expect("failed second");
+        let third = unsafe { a.try_alloc(4) }.expect("failed third");
+        let fourth = unsafe { a.try_alloc(8) }.expect("failed fourth");
+        assert_eq!(
+            a.allocations,
+            vec![al(4, 0), al(8, 4), al(4, 12), al(8, 16)]
+        );
+        a.dealloc(second);
+        a.dealloc(third);
+        // now we should have space between 4..16, we try to insert an 11 long memory block
+        let _fifth = unsafe { a.try_alloc(11) }.expect("failed fifth");
+        assert_eq!(a.allocations, vec![al(4, 0), al(11, 4), al(8, 16)]);
+
+        a.dealloc(fourth);
+        let _sixth = unsafe { a.try_alloc(9) }.expect("failed fifth");
+        assert_eq!(a.allocations, vec![al(4, 0), al(11, 4), al(9, 15)]);
+    }
 }
-
-/*
-fn is_compatible(first: Range<u64>, second: Range<u64>) -> bool {
-        first.end < second.start || second.end < first.start
-    }
-
-    fn available_allocation(&self, size: u64) -> Option<u64> {
-        // We will advance this head through all allocations
-        let mut head = 0u64;
-        let mut found_space = false;
-        while !found_space {
-            match self
-                .allocations
-                .iter()
-                .find(|(_id, a)| Self::is_compatible((*a).into(), head..head + size))
-            {
-                Some((_, a)) => head = a.offset + a.size,
-                None => found_space = true,
-            }
-            if head + size > self.size {
-                break;
-            };
-        }
-        if found_space {
-            Some(head)
-        } else {
-            None
-        }
-    }
-
-    fn has_space(&self, size: u64) -> bool {
-        self.available_allocation(size).is_some()
-    }
-
-    fn allocate(&mut self, size: u64) -> Index {
-        let offset = self
-            .available_allocation(size)
-            .expect("[Heapy] Page Memory mismatch");
-        self.allocations.insert(Allocation { offset, size })
-    }
- */

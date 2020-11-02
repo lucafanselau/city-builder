@@ -7,8 +7,7 @@ use gfx_hal::{
     Backend, MemoryTypeId,
 };
 use owning_ref::RwLockReadGuardRef;
-use raw_window_handle::RawWindowHandle;
-use std::ops::{Deref, Range};
+use std::ops::Deref;
 use std::sync::atomic::AtomicU64;
 use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
@@ -45,8 +44,11 @@ pub struct Heapy<B: Backend> {
     min_alignment: AtomicU64,
 }
 
-type MemoryBindingRef<'a, B: Backend> =
-    RwLockReadGuardRef<'a, HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>, B::Memory>;
+type MemoryBindingRef<'a, B> = RwLockReadGuardRef<
+    'a,
+    HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>,
+    <B as Backend>::Memory,
+>;
 
 impl<B: Backend> Heapy<B> {
     pub(crate) fn new(device: Arc<B::Device>, physical_device: &B::PhysicalDevice) -> Self {
@@ -207,7 +209,7 @@ impl<B: Backend> Heapy<B> {
             .memory_types
             .iter()
             .enumerate()
-            .find(|(id, mem_type)| mem_type.properties.contains(props))
+            .find(|(_id, mem_type)| mem_type.properties.contains(props))
             .map(|(id, mem_type)| {
                 (
                     MemoryTypeId(id),

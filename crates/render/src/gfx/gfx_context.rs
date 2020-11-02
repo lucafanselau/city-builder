@@ -4,7 +4,6 @@ use crate::resource::buffer::BufferDescriptor;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
 use std::sync::Arc;
 
 #[derive(Debug)]
