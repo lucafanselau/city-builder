@@ -1,10 +1,10 @@
 use crate::context::GpuContext;
-use crate::gfx::heapy::Heapy;
-use crate::resource::buffer::BufferDescriptor;
+use crate::gfx::heapy::{AllocationIndex, Heapy};
+use crate::resource::buffer::{BufferDescriptor, BufferUsage};
+use bytemuck::Pod;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
-use std::mem::ManuallyDrop;
-use std::sync::Arc;
+use std::{mem::ManuallyDrop, sync::Arc};
 
 #[derive(Debug)]
 struct Queues<B: Backend> {
@@ -120,32 +120,6 @@ impl<B: Backend> GfxContext<B> {
 
         let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
 
-        let mut buffer = unsafe {
-            use gfx_hal::buffer::Usage;
-            device
-                .create_buffer(48, Usage::TRANSFER_DST | Usage::UNIFORM)
-                .expect("failed to create test buffer")
-        };
-
-        let requirements = unsafe { device.get_buffer_requirements(&buffer) };
-
-        use crate::gfx::heapy::MemoryType;
-        let allocation = heapy.alloc(
-            requirements.size,
-            MemoryType::DeviceLocal,
-            Some(requirements),
-        );
-
-        heapy.bind_buffer(allocation, &mut buffer);
-
-        // Here the buffer has a beautiful life
-
-        // now we should delete the buffer first and then deallocate
-        unsafe {
-            device.destroy_buffer(buffer);
-        }
-        heapy.deallocate(allocation);
-
         Self {
             instance,
             surface: ManuallyDrop::new(surface),
@@ -158,12 +132,19 @@ impl<B: Backend> GfxContext<B> {
 }
 
 impl<B: Backend> GpuContext for GfxContext<B> {
-    type BufferHandle = B::Buffer;
+    type BufferHandle = (B::Buffer, AllocationIndex);
 
-    fn create_buffer(&self, desc: BufferDescriptor) -> Self::BufferHandle {
+    fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
-            match self.device.create_buffer(desc.size, desc.usage) {
-                Ok(buffer) => buffer,
+            match self.device.create_buffer(desc.size, get_buffer_usage(desc)) {
+                Ok(mut buffer) => {
+                    let requirements = self.device.get_buffer_requirements(&buffer);
+                    let allocation =
+                        self.heapy
+                            .alloc(requirements.size, desc.memory_type, Some(requirements));
+                    self.heapy.bind_buffer(&allocation, &mut buffer);
+                    (buffer, allocation)
+                }
                 Err(err) => panic!(
                     "[GfxContext] failed to create buffer [{}]: {:#?}",
                     desc.name, err
@@ -172,9 +153,30 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         }
     }
 
+    unsafe fn write_to_buffer<D: Pod>(&self, buffer: &Self::BufferHandle, data: &D) {
+        self.heapy.write(&buffer.1, bytemuck::bytes_of(data));
+    }
+
     fn drop_buffer(&self, buffer: Self::BufferHandle) {
         unsafe {
-            self.device.destroy_buffer(buffer);
+            self.device.destroy_buffer(buffer.0);
         }
+        self.heapy.deallocate(buffer.1);
+    }
+}
+
+// Helper functions, mainly maps between our enums and gfx_hal's ones
+fn get_buffer_usage(desc: &BufferDescriptor) -> gfx_hal::buffer::Usage {
+    use crate::resource::buffer::MemoryType;
+    use gfx_hal::buffer::Usage;
+    let usage = match desc.usage {
+        BufferUsage::Uniform => Usage::UNIFORM,
+        BufferUsage::Vertex => Usage::VERTEX,
+        BufferUsage::Index => Usage::INDEX,
+    };
+    if desc.memory_type == MemoryType::DeviceLocal {
+        usage | Usage::TRANSFER_DST
+    } else {
+        usage
     }
 }

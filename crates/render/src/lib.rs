@@ -2,6 +2,7 @@
 
 pub mod context;
 pub mod gfx;
+pub mod gpu_resources;
 pub mod resource;
 
 /// This is where we want to go (at least) roughly with our implementation

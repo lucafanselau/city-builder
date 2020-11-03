@@ -18,7 +18,9 @@ use gfx_backend_vulkan as back;
 
 use ecs::prelude::*;
 use render;
+use render::resource::buffer::{BufferDescriptor, BufferUsage, MemoryType};
 use std::borrow::Borrow;
+use std::sync::Arc;
 
 fn main() {
     let _logger = {
@@ -28,7 +30,7 @@ fn main() {
             .set_location_level(LevelFilter::Warn)
             .build();
 
-        TermLogger::init(LevelFilter::max(), config, TerminalMode::Mixed).unwrap()
+        TermLogger::init(LevelFilter::Warn, config, TerminalMode::Mixed).unwrap()
     };
 
     let _schedule = {
@@ -41,7 +43,18 @@ fn main() {
     let (_event_loop, window) =
         window::create_window("Mightycity", window_size).expect("failed to create a window");
 
-    let _ctx = render::context::create_render_context::<winit::window::Window>(window.borrow());
+    let ctx = Arc::new(render::context::create_render_context::<
+        winit::window::Window,
+    >(window.borrow()));
+
+    let resources = render::gpu_resources::GpuResources::new(ctx);
+
+    let _buffer = resources.create_empty_buffer(BufferDescriptor {
+        name: "test_buffer".into(),
+        size: 24,
+        memory_type: MemoryType::DeviceLocal,
+        usage: BufferUsage::Uniform,
+    });
 }
 
 fn old_main() {

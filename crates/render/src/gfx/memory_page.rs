@@ -38,8 +38,8 @@ impl<B: Backend> MemoryPage<B> {
 
 #[derive(Debug, Clone)]
 struct Allocation {
-    offset: u64,
-    size: u64,
+    pub(crate) offset: u64,
+    pub(crate) size: u64,
 }
 
 // Trait implementations for Allocation
@@ -75,7 +75,7 @@ pub(crate) enum AllocationError {
 #[derive(Debug)]
 pub(crate) struct Allocations {
     size: u64,
-    allocations: Vec<Allocation>,
+    pub(crate) allocations: Vec<Allocation>,
 }
 
 impl Allocations {

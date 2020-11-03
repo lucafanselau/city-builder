@@ -1,4 +1,5 @@
 use crate::gfx::memory_page::MemoryPage;
+use crate::resource::buffer::MemoryType;
 use generational_arena::{Arena, Index};
 use gfx_hal::{
     adapter::PhysicalDevice,
@@ -6,17 +7,10 @@ use gfx_hal::{
     memory::{Properties, Requirements},
     Backend, MemoryTypeId,
 };
-use owning_ref::RwLockReadGuardRef;
+use parking_lot::RwLock;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU64;
-use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum MemoryType {
-    DeviceLocal,
-    HostVisible,
-}
 
 #[derive(Debug)]
 pub(crate) struct PageInfo {
@@ -25,7 +19,7 @@ pub(crate) struct PageInfo {
     properties: Properties,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug)]
 pub struct AllocationIndex {
     memory_type: MemoryType,
     page: Index,
@@ -40,15 +34,10 @@ pub struct Heapy<B: Backend> {
     device: Arc<B::Device>,
     // And our memory pages
     // allocations: Arena<Allocation>,
+    // TODO: This is horrible, we need a better multi-threading ready model here
     pages: RwLock<HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>>,
     min_alignment: AtomicU64,
 }
-
-type MemoryBindingRef<'a, B> = RwLockReadGuardRef<
-    'a,
-    HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>,
-    <B as Backend>::Memory,
->;
 
 impl<B: Backend> Heapy<B> {
     pub(crate) fn new(device: Arc<B::Device>, physical_device: &B::PhysicalDevice) -> Self {
@@ -95,10 +84,7 @@ impl<B: Backend> Heapy<B> {
         let size = round_up_to_nearest_multiple(size, min_alignment);
 
         // We will always need writing access to pages to allocate (maybe we can optimize here alot)
-        let mut pages = self
-            .pages
-            .write()
-            .expect("[Heapy] (allocate) failed to acquire lock");
+        let mut pages = self.pages.write();
         let (page_info, pages) = pages
             .get_mut(&memory_type)
             .expect("Memory Type uninitialized");
@@ -146,50 +132,35 @@ impl<B: Backend> Heapy<B> {
         }
     }
 
-    fn get_bind_data(&self, at: AllocationIndex) -> Option<(MemoryBindingRef<B>, u64)> {
-        let memory = RwLockReadGuardRef::new(self.pages.read().expect("")).map(|pages| {
-            let (_page_info, pages) = pages.get(&at.memory_type).expect("");
-            let page = pages.get(at.page).expect("");
-            page.memory_handle.deref()
+    fn get_bind_data(&self, at: &AllocationIndex, cb: impl Fn(&B::Memory, u64)) {
+        let pages = self.pages.read();
+        let (_page_info, pages) = pages
+            .get(&at.memory_type)
+            .expect("[Heapy] (get_bind_data) invalid index");
+        let page = pages
+            .get(at.page)
+            .expect("[Heapy] (get_bind_data) invalid index");
+        cb(page.memory_handle.deref(), at.offset);
+    }
+
+    pub(crate) fn bind_buffer(&self, at: &AllocationIndex, buffer: &mut B::Buffer) {
+        self.get_bind_data(at, |memory, offset| unsafe {
+            self.device
+                .bind_buffer_memory(memory.deref(), offset, buffer)
+                .expect("[Heapy] (bind_buffer) bind_memory failed with error");
         });
-        Some((memory, at.offset))
     }
 
-    pub(crate) fn bind_buffer(&self, at: AllocationIndex, buffer: &mut B::Buffer) {
-        if let Some((memory, offset)) = self.get_bind_data(at) {
-            unsafe {
-                if let Err(e) = self
-                    .device
-                    .bind_buffer_memory(memory.deref(), offset, buffer)
-                {
-                    panic!(
-                        "[Heapy] (bind_buffer) bind_memory failed with error: {:#?}",
-                        e
-                    );
-                }
-            }
-        } else {
-            panic!("[Heapy] (bind_buffer) invalid allocation index");
-        }
-    }
-
-    pub(crate) fn bind_image(&self, at: AllocationIndex, image: &mut B::Image) {
-        if let Some((memory, offset)) = self.get_bind_data(at) {
-            unsafe {
-                if let Err(e) = self.device.bind_image_memory(memory.deref(), offset, image) {
-                    panic!(
-                        "[Heapy] (bind_image) bind_memory failed with error: {:#?}",
-                        e
-                    );
-                }
-            }
-        } else {
-            panic!("[Heapy] (bind_image) invalid allocation index");
-        }
+    pub(crate) fn bind_image(&self, at: &AllocationIndex, image: &mut B::Image) {
+        self.get_bind_data(at, |memory, offset| unsafe {
+            self.device
+                .bind_image_memory(memory.deref(), offset, image)
+                .expect("[Heapy] (bind_image) bind_memory failed with error");
+        });
     }
 
     pub(crate) fn deallocate(&self, at: AllocationIndex) {
-        let mut pages = self.pages.write().unwrap();
+        let mut pages = self.pages.write();
         let result = (move || {
             let (_page_info, pages) = pages.get_mut(&at.memory_type)?;
             let page = pages.get_mut(at.page)?;
@@ -200,6 +171,44 @@ impl<B: Backend> Heapy<B> {
         if let None = result {
             panic!("[Heapy] (deallocate) failed, probably because \"at\" was invalid")
         }
+    }
+
+    /// Safety: Will panic if allocation is not HostVisible
+    pub(crate) unsafe fn write(&self, at: &AllocationIndex, data: &[u8]) {
+        if at.memory_type != MemoryType::HostVisible {
+            panic!("[Heapy] (write) tried to map un-mappable memory");
+        }
+        let pages = self.pages.write();
+        let (_, pages) = pages
+            .get(&at.memory_type)
+            .expect("[Heapy] (write) invalid index");
+        let page = pages.get(at.page).expect("[Heapy] (write) invalid index");
+        let allocation = page
+            .allocations
+            .allocations
+            .iter()
+            .find(|a| a.offset == at.offset)
+            .expect("[Heapy] (write) invalid index");
+        // Map that with a device
+        use gfx_hal::memory::Segment;
+        let dst = self
+            .device
+            .map_memory(
+                page.memory_handle.deref(),
+                Segment {
+                    offset: allocation.offset,
+                    size: Some(allocation.size),
+                },
+            )
+            .expect("[Heapy] (write) map_memory failed");
+
+        std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len());
+
+        // TODO: Maybe flush here, but in heapy we request coherent memory -> no flushing (al my guess)
+        // https://stackoverflow.com/questions/36241009/what-is-coherent-memory-on-gpu
+
+        // unmap memory again
+        self.device.unmap_memory(page.memory_handle.deref());
     }
 
     fn get_page_info(device: &B::PhysicalDevice, props: Properties) -> PageInfo {
@@ -238,7 +247,7 @@ impl<B: Backend> Heapy<B> {
 impl<B: Backend> Drop for Heapy<B> {
     fn drop(&mut self) {
         // We need to drop all memory pages
-        let mut pages = self.pages.write().unwrap();
+        let mut pages = self.pages.write();
         for (_k, (_info, mut pages)) in pages.drain() {
             for (_id, mut memory_page) in pages.drain() {
                 memory_page.free(&self.device)

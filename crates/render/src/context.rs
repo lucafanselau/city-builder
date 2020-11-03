@@ -3,6 +3,7 @@ use std::fmt::Debug;
 
 use crate::gfx::gfx_context::GfxContext;
 use crate::resource::buffer::BufferDescriptor;
+use bytemuck::Pod;
 use gfx_backend_vulkan as graphics_backend;
 
 pub trait GpuContext: Send + Sync {
@@ -15,7 +16,10 @@ pub trait GpuContext: Send + Sync {
     // ) -> Self::BufferHandle
 
     /// Create a buffer that is not bound to any memory, see bind_memory for that
-    fn create_buffer(&self, desc: BufferDescriptor) -> Self::BufferHandle;
+    fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle;
+
+    /// Safety: this is only valid for buffers that are writable, eg. memory_type == HostVisible
+    unsafe fn write_to_buffer<D: Pod>(&self, buffer: &Self::BufferHandle, data: &D);
 
     /// Drop a Buffer handle
     fn drop_buffer(&self, buffer: Self::BufferHandle);
