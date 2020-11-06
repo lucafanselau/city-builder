@@ -26,6 +26,7 @@ owning_ref =  "0.4.1"
 uuid = { version = "0.8", features = ["v4"] }
 anyhow = "1.0.32"
 thiserror = "1.0.20"
+bytemuck = { version =  "1.4.1", features = ["derive"] }
 
 ecs = { path = "crates/ecs" }
 render = { path = "crates/render" }

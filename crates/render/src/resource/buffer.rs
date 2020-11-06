@@ -1,6 +1,7 @@
-use crate::context::GpuContext;
+use crate::context::{CurrentContext, GpuContext};
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -24,28 +25,38 @@ pub struct BufferDescriptor {
     pub usage: BufferUsage,
 }
 
+type BufferHandle = <CurrentContext as GpuContext>::BufferHandle;
+
 #[derive(Debug)]
-pub struct Buffer<C: GpuContext> {
+pub struct Buffer {
     name: Cow<'static, str>,
-    ctx: Arc<C>,
-    handle: ManuallyDrop<<C as GpuContext>::BufferHandle>,
+    ctx: Arc<CurrentContext>,
+    handle: ManuallyDrop<BufferHandle>,
 }
 
-impl<C: GpuContext> Buffer<C> {
-    pub fn new(
-        name: Cow<'static, str>,
-        handle: <C as GpuContext>::BufferHandle,
-        ctx: Arc<C>,
-    ) -> Self {
+impl Buffer {
+    pub fn new(name: Cow<'static, str>, handle: BufferHandle, ctx: Arc<CurrentContext>) -> Self {
         Self {
             name,
             ctx,
             handle: ManuallyDrop::new(handle),
         }
     }
+
+    pub fn get_handle(&self) -> &BufferHandle {
+        self.handle.deref()
+    }
 }
 
-impl<C: GpuContext> Drop for Buffer<C> {
+impl Deref for Buffer {
+    type Target = BufferHandle;
+
+    fn deref(&self) -> &Self::Target {
+        self.handle.deref()
+    }
+}
+
+impl Drop for Buffer {
     fn drop(&mut self) {
         unsafe {
             self.ctx.drop_buffer(ManuallyDrop::take(&mut self.handle));

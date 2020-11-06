@@ -37,7 +37,7 @@ impl<B: Backend> MemoryPage<B> {
 }
 
 #[derive(Debug, Clone)]
-struct Allocation {
+pub(crate) struct Allocation {
     pub(crate) offset: u64,
     pub(crate) size: u64,
 }

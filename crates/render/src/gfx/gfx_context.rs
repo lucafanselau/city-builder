@@ -143,6 +143,10 @@ impl<B: Backend> GpuContext for GfxContext<B> {
                         self.heapy
                             .alloc(requirements.size, desc.memory_type, Some(requirements));
                     self.heapy.bind_buffer(&allocation, &mut buffer);
+
+                    use std::ops::Deref;
+                    self.device.set_buffer_name(&mut buffer, desc.name.deref());
+
                     (buffer, allocation)
                 }
                 Err(err) => panic!(
@@ -162,6 +166,12 @@ impl<B: Backend> GpuContext for GfxContext<B> {
             self.device.destroy_buffer(buffer.0);
         }
         self.heapy.deallocate(buffer.1);
+    }
+}
+
+impl<B: Backend> Drop for GfxContext<B> {
+    fn drop(&mut self) {
+        self.device.wait_idle().expect("failed to wait idle");
     }
 }
 

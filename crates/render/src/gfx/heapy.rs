@@ -132,7 +132,7 @@ impl<B: Backend> Heapy<B> {
         }
     }
 
-    fn get_bind_data(&self, at: &AllocationIndex, cb: impl Fn(&B::Memory, u64)) {
+    fn get_bind_data(&self, at: &AllocationIndex, mut cb: impl FnMut(&B::Memory, u64)) {
         let pages = self.pages.read();
         let (_page_info, pages) = pages
             .get(&at.memory_type)
@@ -189,6 +189,13 @@ impl<B: Backend> Heapy<B> {
             .iter()
             .find(|a| a.offset == at.offset)
             .expect("[Heapy] (write) invalid index");
+        let data_length = data.len();
+        if (allocation.size as usize) < data_length {
+            panic!(
+                "[Heapy] (write) data is larger than buffer {} vs. {}",
+                allocation.size, data_length
+            );
+        }
         // Map that with a device
         use gfx_hal::memory::Segment;
         let dst = self
@@ -202,7 +209,7 @@ impl<B: Backend> Heapy<B> {
             )
             .expect("[Heapy] (write) map_memory failed");
 
-        std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len());
+        std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data_length);
 
         // TODO: Maybe flush here, but in heapy we request coherent memory -> no flushing (al my guess)
         // https://stackoverflow.com/questions/36241009/what-is-coherent-memory-on-gpu

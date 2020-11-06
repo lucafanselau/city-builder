@@ -22,6 +22,16 @@ use render::resource::buffer::{BufferDescriptor, BufferUsage, MemoryType};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
+use std::ops::Deref;
+
+#[derive(Copy, Clone, Zeroable, Pod)]
+#[repr(C)]
+struct SampleData {
+    a: u32,
+    b: u32,
+}
+
 fn main() {
     let _logger = {
         use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
@@ -47,14 +57,20 @@ fn main() {
         winit::window::Window,
     >(window.borrow()));
 
-    let resources = render::gpu_resources::GpuResources::new(ctx);
+    let resources = render::gpu_resources::GpuResources::new(ctx.clone());
 
-    let _buffer = resources.create_empty_buffer(BufferDescriptor {
+    let buffer = resources.create_empty_buffer(BufferDescriptor {
         name: "test_buffer".into(),
-        size: 24,
-        memory_type: MemoryType::DeviceLocal,
+        size: 4,
+        memory_type: MemoryType::HostVisible,
         usage: BufferUsage::Uniform,
     });
+
+    let sample_data = SampleData { a: 17, b: 21 };
+    unsafe {
+        use render::context::GpuContext;
+        ctx.write_to_buffer(buffer.deref(), &sample_data);
+    }
 }
 
 fn old_main() {
