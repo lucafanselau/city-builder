@@ -1,6 +1,7 @@
 use crate::context::GpuContext;
 use crate::gfx::heapy::{AllocationIndex, Heapy};
 use crate::resource::buffer::{BufferDescriptor, BufferUsage};
+use crate::resource::pipeline::GraphicsPipelineDescriptor;
 use bytemuck::Pod;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
@@ -25,6 +26,7 @@ where
     queues: Queues<B>,
     // Memory managment
     heapy: Heapy<B>,
+    // Pipelines
 }
 
 impl<B: Backend> GfxContext<B> {
@@ -133,6 +135,7 @@ impl<B: Backend> GfxContext<B> {
 
 impl<B: Backend> GpuContext for GfxContext<B> {
     type BufferHandle = (B::Buffer, AllocationIndex);
+    type PipelineHandle = B::GraphicsPipeline;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -166,6 +169,16 @@ impl<B: Backend> GpuContext for GfxContext<B> {
             self.device.destroy_buffer(buffer.0);
         }
         self.heapy.deallocate(buffer.1);
+    }
+
+    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle {
+        unimplemented!()
+    }
+
+    fn drop_pipeline(&self, pipeline: Self::PipelineHandle) {
+        unsafe {
+            self.device.destroy_graphics_pipeline(pipeline);
+        }
     }
 }
 

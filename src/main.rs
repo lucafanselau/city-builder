@@ -57,7 +57,7 @@ fn main() {
         winit::window::Window,
     >(window.borrow()));
 
-    let resources = render::gpu_resources::GpuResources::new(ctx.clone());
+    let resources = render::resources::GpuResources::new(ctx.clone());
 
     let buffer = resources.create_empty_buffer(BufferDescriptor {
         name: "test_buffer".into(),

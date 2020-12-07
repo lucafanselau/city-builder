@@ -1,4 +1,5 @@
 use crate::resource::buffer::BufferDescriptor;
+use crate::resource::pipeline::GraphicsPipelineDescriptor;
 use bytemuck::Pod;
 use raw_window_handle::HasRawWindowHandle;
 use std::fmt::Debug;
@@ -26,7 +27,7 @@ pub trait GpuContext: Send + Sync {
 
     // Pipelines
 
-    fn create_pipeline(&self, desc: &PipelineDescriptor) -> Self::PipelineHandle;
+    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle;
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle);
 
     // fn create_texture()
@@ -44,6 +45,7 @@ pub trait GpuContext: Send + Sync {
 
 // here would be like #[cfg(feature = "gfx")] or something if we make this plug and play
 use gfx_backend_vulkan as graphics_backend;
+
 pub type CurrentContext = crate::gfx::gfx_context::GfxContext<graphics_backend::Backend>;
 
 pub fn create_render_context<W: HasRawWindowHandle>(window: &W) -> CurrentContext {

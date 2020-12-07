@@ -2,8 +2,8 @@
 
 pub mod context;
 pub mod gfx;
-pub mod gpu_resources;
 pub mod resource;
+pub mod resources;
 
 /// This is where we want to go (at least) roughly with our implementation
 // struct Graph {}
