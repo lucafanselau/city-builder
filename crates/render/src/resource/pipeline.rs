@@ -7,73 +7,74 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PipelineShaders {
-    vertex: Vec<u32>,
-    fragment: Vec<u32>,
-    geometry: Option<Vec<u32>>, // etc...
+    pub vertex: Vec<u32>,
+    pub fragment: Vec<u32>,
+    pub geometry: Option<Vec<u32>>, // etc...
 }
 
 #[derive(Debug)]
-enum PolygonMode {
+pub(crate) enum PolygonMode {
     Point,
     Line,
     Fill,
 }
 
 #[derive(Debug)]
-enum Winding {
+pub(crate) enum Winding {
     Clockwise,
     CounterClockwise,
 }
 
 #[derive(Debug)]
-enum CullFace {
+pub(crate) enum CullFace {
+    None,
     Front,
     Back,
 }
 
 #[derive(Debug)]
-struct Culling {
-    winding: Winding,
-    cull_face: CullFace,
+pub(crate) struct Culling {
+    pub winding: Winding,
+    pub cull_face: CullFace,
 }
 
 #[derive(Debug)]
-struct Rasterizer {
-    polygon_mode: PolygonMode,
-    culling: Culling, // We might add fields later but for now this should be sufficent
+pub(crate) struct Rasterizer {
+    pub polygon_mode: PolygonMode,
+    pub culling: Culling, // We might add fields later but for now this should be sufficent
 }
 
-#[derive(Debug)]
-enum VertexInputRate {
+#[derive(Debug, Clone)]
+pub(crate) enum VertexInputRate {
     Vertex,
     Instance,
 }
 
-#[derive(Debug)]
-struct VertexBufferDescriptor {
-    binding: u32,
-    stride: u32,
-    rate: VertexInputRate,
+#[derive(Debug, Clone)]
+pub(crate) struct VertexBufferDescriptor {
+    pub binding: u32,
+    pub stride: u32,
+    pub rate: VertexInputRate,
 }
 
 #[derive(Debug)]
-enum VertexAttributeFormat {
+pub(crate) enum VertexAttributeFormat {
     Vec2,
     Vec3,
     Vec4,
 }
 
 #[derive(Debug)]
-struct AttributeDescriptor {
-    location: u32,
+pub(crate) struct AttributeDescriptor {
+    pub location: u32,
     /// index of the vertex buffer that fills this attribute
-    binding: u32,
-    offset: u32,
-    format: VertexAttributeFormat,
+    pub binding: u32,
+    pub offset: u32,
+    pub format: VertexAttributeFormat,
 }
 
 #[derive(Debug)]
-enum Primitive {
+pub(crate) enum Primitive {
     PointList,
     LineList,
     LineStrip,
@@ -83,7 +84,7 @@ enum Primitive {
 
 /// This is a copy from gfx_hal, so look there
 #[derive(Debug)]
-enum ComparisonFunction {
+pub(crate) enum ComparisonFunction {
     Never,
     Less,
     Equal,
@@ -95,19 +96,19 @@ enum ComparisonFunction {
 }
 
 #[derive(Debug)]
-struct DepthDescriptor {
+pub(crate) struct DepthDescriptor {
     function: ComparisonFunction,
     write: bool,
 }
 
 #[derive(Debug)]
-enum PipelineState<T: Debug> {
+pub(crate) enum PipelineState<T: Debug> {
     Baked(T),
     Dynamic,
 }
 
 #[derive(Debug)]
-struct ViewportRect {
+pub(crate) struct ViewportRect {
     x: i16,
     y: i16,
     width: i16,
@@ -115,7 +116,7 @@ struct ViewportRect {
 }
 
 #[derive(Debug)]
-struct Viewport {
+pub(crate) struct Viewport {
     viewport: PipelineState<ViewportRect>,
     scissor: PipelineState<ViewportRect>,
 }
@@ -124,23 +125,23 @@ struct Viewport {
 pub struct GraphicsPipelineDescriptor {
     pub(crate) name: Cow<'static, str>,
 
-    shaders: PipelineShaders,
+    pub(crate) shaders: PipelineShaders,
     /// TODO: Render Pass layout for this Pipeline
-    rasterizer: Rasterizer,
+    pub(crate) rasterizer: Rasterizer,
     // This should an probably will be serialized?
     /// List of expected vertex buffers for program execution
-    vertex_buffers: Vec<VertexBufferDescriptor>,
+    pub(crate) vertex_buffers: Vec<VertexBufferDescriptor>,
     /// List of the Attributes that will be bound to the shader
-    attributes: Vec<AttributeDescriptor>,
+    pub(crate) attributes: Vec<AttributeDescriptor>,
     /// the primitives that should be rendered
-    primitive: Primitive,
+    pub(crate) primitive: Primitive,
     // TODO: Blending support, but since this is dependent on how we implement the render_pass
     //       system we might worry about it later, since alpha blending is not our primary goal
     //       right now :)
     /// Enable a depth testing function
-    depth: Option<DepthDescriptor>, // TODO: Multisampling
+    pub(crate) depth: Option<DepthDescriptor>, // TODO: Multisampling
     /// The viewport for this pipeline
-    viewport: Viewport,
+    pub(crate) viewport: Viewport,
     // TODO: Descriptors? !!!!
 }
 
