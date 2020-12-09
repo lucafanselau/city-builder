@@ -34,6 +34,11 @@ pub trait GpuContext: Send + Sync {
     // fn create_initialized_texture()
     // And maybe something more sophisticated for attachments
 
+    // TODO: if we want to support multi surface or headless drawing a surface can not be bound to
+    //  the context...
+    /// Will return the format of the created surface
+    fn get_surface_format(&self) -> TextureFormat;
+
     fn create_command_encoder(&self) {}
 
     fn submit_command(&self) {}
@@ -44,6 +49,7 @@ pub trait GpuContext: Send + Sync {
 }
 
 // here would be like #[cfg(feature = "gfx")] or something if we make this plug and play
+use crate::util::format::TextureFormat;
 use gfx_backend_vulkan as graphics_backend;
 
 pub type CurrentContext = crate::gfx::gfx_context::GfxContext<graphics_backend::Backend>;

@@ -4,6 +4,7 @@ pub mod context;
 pub mod gfx;
 pub mod resource;
 pub mod resources;
+pub mod util;
 
 /// This is where we want to go (at least) roughly with our implementation
 // struct Graph {}

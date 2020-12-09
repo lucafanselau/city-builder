@@ -23,6 +23,7 @@ use std::borrow::Borrow;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
+use render::context::GpuContext;
 use std::ops::Deref;
 
 #[derive(Copy, Clone, Zeroable, Pod)]
@@ -37,10 +38,10 @@ fn main() {
         use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
 
         let config = ConfigBuilder::new()
-            .set_location_level(LevelFilter::Warn)
+            .set_location_level(LevelFilter::Info)
             .build();
 
-        TermLogger::init(LevelFilter::Warn, config, TerminalMode::Mixed).unwrap()
+        TermLogger::init(LevelFilter::Info, config, TerminalMode::Mixed).unwrap()
     };
 
     let _schedule = {
@@ -56,6 +57,8 @@ fn main() {
     let ctx = Arc::new(render::context::create_render_context::<
         winit::window::Window,
     >(window.borrow()));
+
+    info!("Surface format is {:#?}", ctx.get_surface_format());
 
     let resources = render::resources::GpuResources::new(ctx.clone());
 

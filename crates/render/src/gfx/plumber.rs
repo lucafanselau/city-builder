@@ -2,8 +2,9 @@ use crate::gfx::compat::ToHalType;
 use crate::resource::pipeline::GraphicsPipelineDescriptor;
 use gfx_hal::pass::Subpass;
 use gfx_hal::pso::{
-    AttributeDesc, BasePipeline, EntryPoint, GraphicsPipelineDesc, InputAssemblerDesc,
-    PipelineCreationFlags, PrimitiveAssemblerDesc, ShaderStageFlags, VertexBufferDesc,
+    AttributeDesc, BasePipeline, DepthStencilDesc, EntryPoint, GraphicsPipelineDesc,
+    InputAssemblerDesc, PipelineCreationFlags, PrimitiveAssemblerDesc, ShaderStageFlags,
+    VertexBufferDesc,
 };
 use gfx_hal::{device::Device, Backend};
 use std::iter;
@@ -78,6 +79,12 @@ impl<B: Backend> Plumber<B> {
             geometry: None,
         };
 
+        let depth_stencil = DepthStencilDesc {
+            depth: desc.depth.map(|d| d.clone().convert()),
+            depth_bounds: false,
+            stencil: None,
+        };
+
         let hal_desc = GraphicsPipelineDesc {
             primitive_assembler,
             rasterizer: desc.rasterizer.convert(),
@@ -87,7 +94,7 @@ impl<B: Backend> Plumber<B> {
                 specialization: Default::default(),
             }),
             blender: Default::default(),
-            depth_stencil: Default::default(),
+            depth_stencil,
             multisampling: None,
             baked_states: Default::default(),
             layout: self.empty_layout.deref(),

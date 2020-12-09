@@ -83,7 +83,7 @@ pub(crate) enum Primitive {
 }
 
 /// This is a copy from gfx_hal, so look there
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum ComparisonFunction {
     Never,
     Less,
@@ -95,10 +95,10 @@ pub(crate) enum ComparisonFunction {
     Always,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct DepthDescriptor {
-    function: ComparisonFunction,
-    write: bool,
+    pub function: ComparisonFunction,
+    pub write: bool,
 }
 
 #[derive(Debug)]

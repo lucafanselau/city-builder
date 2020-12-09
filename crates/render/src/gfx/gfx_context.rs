@@ -2,7 +2,9 @@ use crate::context::GpuContext;
 use crate::gfx::heapy::{AllocationIndex, Heapy};
 use crate::resource::buffer::{BufferDescriptor, BufferUsage};
 use crate::resource::pipeline::GraphicsPipelineDescriptor;
+use crate::util::format::TextureFormat;
 use bytemuck::Pod;
+use gfx_hal::format::Format;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
 use std::{mem::ManuallyDrop, sync::Arc};
@@ -23,6 +25,7 @@ where
     device: Arc<B::Device>,
     adapter: gfx_hal::adapter::Adapter<B>,
     surface: ManuallyDrop<B::Surface>,
+    surface_format: TextureFormat,
     queues: Queues<B>,
     // Memory managment
     heapy: Heapy<B>,
@@ -120,11 +123,32 @@ impl<B: Backend> GfxContext<B> {
             (Arc::new(device), queues)
         };
 
+        let surface_format = {
+            use crate::gfx::compat::FromHalType;
+            use gfx_hal::format::ChannelType;
+
+            let supported_formats = surface
+                .supported_formats(&adapter.physical_device)
+                .unwrap_or(vec![]);
+
+            let default_format = *supported_formats.get(0).unwrap_or(&Format::Rgba8Srgb);
+
+            let hal_format = supported_formats
+                .into_iter()
+                .find(|format| format.base_format().1 == ChannelType::Srgb)
+                .unwrap_or(default_format);
+
+            hal_format
+                .convert()
+                .expect("[GfxContext] failed to convert surface format")
+        };
+
         let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
 
         Self {
             instance,
             surface: ManuallyDrop::new(surface),
+            surface_format,
             adapter,
             device,
             queues,
@@ -179,6 +203,10 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         unsafe {
             self.device.destroy_graphics_pipeline(pipeline);
         }
+    }
+
+    fn get_surface_format(&self) -> TextureFormat {
+        self.surface_format.clone()
     }
 }
 
