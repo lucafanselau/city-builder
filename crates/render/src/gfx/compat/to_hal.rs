@@ -1,13 +1,24 @@
 use crate::resource::pipeline::{
-    AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PolygonMode, Primitive,
-    Rasterizer, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate, Winding,
+    AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
+    Primitive, Rasterizer, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate, Winding,
 };
-use crate::util::format::TextureFormat;
+use crate::resource::render_pass::{
+    Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
+    SubpassDescriptor,
+};
+use crate::util::format::{ImageAccess, TextureFormat, TextureLayout};
 use gfx_hal::format::Format;
+use gfx_hal::image::{Access, Layout};
+use gfx_hal::memory::Dependencies;
+use gfx_hal::pass::{
+    Attachment as HalAttachment, AttachmentId, AttachmentLoadOp as HalAttachmentLoadOp,
+    AttachmentOps, AttachmentRef as HalAttachmentRef, AttachmentStoreOp as HalAttachmentStoreOp,
+    SubpassDependency as HalSubpassDependency,
+};
 use gfx_hal::pso::{
-    AttributeDesc, DepthTest, Element, Face, FrontFace, PolygonMode as HalPolygonMode,
-    Primitive as HalPrimitive, Rasterizer as HalRasterizer, State, VertexBufferDesc,
-    VertexInputRate as HalInputRate,
+    AttributeDesc, DepthTest, Element, Face, FrontFace, PipelineStage as HalPipelineStage,
+    PolygonMode as HalPolygonMode, Primitive as HalPrimitive, Rasterizer as HalRasterizer, State,
+    VertexBufferDesc, VertexInputRate as HalInputRate,
 };
 
 pub trait ToHalType {
@@ -180,6 +191,153 @@ impl ToHalType for TextureFormat {
             TextureFormat::Rgba32Sfloat => Format::Rgba32Sfloat,
             TextureFormat::Depth32Sfloat => Format::D32Sfloat,
             TextureFormat::Depth24PlusStencil8 => Format::D24UnormS8Uint,
+        }
+    }
+}
+
+impl ToHalType for TextureLayout {
+    type Target = Layout;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            TextureLayout::General => Layout::General,
+            TextureLayout::ColorAttachmentOptimal => Layout::ColorAttachmentOptimal,
+            TextureLayout::DepthStencilAttachmentOptimal => Layout::DepthStencilAttachmentOptimal,
+            TextureLayout::DepthStencilReadOnlyOptimal => Layout::DepthStencilReadOnlyOptimal,
+            TextureLayout::ShaderReadOnlyOptimal => Layout::ShaderReadOnlyOptimal,
+            TextureLayout::TransferSrcOptimal => Layout::TransferSrcOptimal,
+            TextureLayout::TransferDstOptimal => Layout::TransferDstOptimal,
+            TextureLayout::Undefined => Layout::Undefined,
+            TextureLayout::Preinitialized => Layout::Preinitialized,
+            TextureLayout::Present => Layout::Present,
+        }
+    }
+}
+
+impl ToHalType for AttachmentLoadOp {
+    type Target = HalAttachmentLoadOp;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            AttachmentLoadOp::Load => HalAttachmentLoadOp::Load,
+            AttachmentLoadOp::Clear => HalAttachmentLoadOp::Clear,
+            AttachmentLoadOp::DontCare => HalAttachmentLoadOp::DontCare,
+        }
+    }
+}
+
+impl ToHalType for AttachmentStoreOp {
+    type Target = HalAttachmentStoreOp;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            AttachmentStoreOp::Store => HalAttachmentStoreOp::Store,
+            AttachmentStoreOp::DontCare => HalAttachmentStoreOp::DontCare,
+        }
+    }
+}
+
+impl ToHalType for PipelineStage {
+    type Target = HalPipelineStage;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            PipelineStage::TopOfPipe => HalPipelineStage::TOP_OF_PIPE,
+            PipelineStage::DrawIndirect => HalPipelineStage::DRAW_INDIRECT,
+            PipelineStage::VertexInput => HalPipelineStage::VERTEX_INPUT,
+            PipelineStage::VertexShader => HalPipelineStage::VERTEX_SHADER,
+            PipelineStage::HullShader => HalPipelineStage::HULL_SHADER,
+            PipelineStage::DomainShader => HalPipelineStage::DOMAIN_SHADER,
+            PipelineStage::GeometryShader => HalPipelineStage::GEOMETRY_SHADER,
+            PipelineStage::FragmentShader => HalPipelineStage::FRAGMENT_SHADER,
+            PipelineStage::EarlyFragmentTests => HalPipelineStage::EARLY_FRAGMENT_TESTS,
+            PipelineStage::LateFragmentTests => HalPipelineStage::LATE_FRAGMENT_TESTS,
+            PipelineStage::ColorAttachmentOutput => HalPipelineStage::COLOR_ATTACHMENT_OUTPUT,
+            PipelineStage::ComputeShader => HalPipelineStage::COMPUTE_SHADER,
+            PipelineStage::Transfer => HalPipelineStage::TRANSFER,
+            PipelineStage::BottomOfPipe => HalPipelineStage::BOTTOM_OF_PIPE,
+            PipelineStage::Host => HalPipelineStage::HOST,
+            PipelineStage::TaskShader => HalPipelineStage::TASK_SHADER,
+            PipelineStage::MeshShader => HalPipelineStage::MESH_SHADER,
+        }
+    }
+}
+
+impl ToHalType for ImageAccess {
+    type Target = Access;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            ImageAccess::InputAttachmentRead => Access::INPUT_ATTACHMENT_READ,
+            ImageAccess::ShaderRead => Access::SHADER_READ,
+            ImageAccess::ShaderWrite => Access::SHADER_WRITE,
+            ImageAccess::ColorAttachmentRead => Access::COLOR_ATTACHMENT_READ,
+            ImageAccess::ColorAttachmentWrite => Access::COLOR_ATTACHMENT_WRITE,
+            ImageAccess::DepthStencilAttachmentRead => Access::DEPTH_STENCIL_ATTACHMENT_READ,
+            ImageAccess::DepthStencilAttachmentWrite => Access::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            ImageAccess::TransferRead => Access::TRANSFER_READ,
+            ImageAccess::TransferWrite => Access::TRANSFER_WRITE,
+            ImageAccess::HostRead => Access::HOST_READ,
+            ImageAccess::HostWrite => Access::HOST_WRITE,
+            ImageAccess::MemoryRead => Access::MEMORY_READ,
+            ImageAccess::MemoryWrite => Access::MEMORY_WRITE,
+        }
+    }
+}
+
+impl ToHalType for Attachment {
+    type Target = HalAttachment;
+
+    fn convert(self) -> Self::Target {
+        HalAttachment {
+            format: Some(self.format.convert()),
+            samples: 0,
+            ops: AttachmentOps::new(self.load_op.convert(), self.store_op.convert()),
+            stencil_ops: AttachmentOps::DONT_CARE,
+            layouts: self.layouts.start.convert()..self.layouts.end.convert(),
+        }
+    }
+}
+
+impl ToHalType for AttachmentRef {
+    type Target = HalAttachmentRef;
+
+    fn convert(self) -> Self::Target {
+        (self.0, self.1.convert())
+    }
+}
+
+pub struct HalCompatibleSubpassDescriptor {
+    pub colors: Vec<HalAttachmentRef>,
+    pub depth_stencil: Option<HalAttachmentRef>,
+    pub inputs: Vec<HalAttachmentRef>,
+    pub resolves: Vec<HalAttachmentRef>,
+    pub preserves: Vec<AttachmentId>,
+}
+
+impl ToHalType for SubpassDescriptor {
+    type Target = HalCompatibleSubpassDescriptor;
+
+    fn convert(self) -> Self::Target {
+        HalCompatibleSubpassDescriptor {
+            colors: self.colors.into_iter().map(|a| a.convert()).collect(),
+            depth_stencil: self.depth_stencil.map(|a| a.convert()),
+            inputs: self.inputs.into_iter().map(|a| a.convert()).collect(),
+            resolves: self.resolves.into_iter().map(|a| a.convert()).collect(),
+            preserves: self.preserves,
+        }
+    }
+}
+
+impl ToHalType for SubpassDependency {
+    type Target = HalSubpassDependency;
+
+    fn convert(self) -> Self::Target {
+        HalSubpassDependency {
+            passes: self.passes,
+            stages: self.stages.start.convert()..self.stages.end.convert(),
+            accesses: self.accesses.start.convert()..self.accesses.end.convert(),
+            flags: Dependencies::empty(),
         }
     }
 }

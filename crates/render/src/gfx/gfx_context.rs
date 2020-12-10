@@ -1,10 +1,13 @@
 use crate::context::GpuContext;
+use crate::gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType};
 use crate::gfx::heapy::{AllocationIndex, Heapy};
 use crate::resource::buffer::{BufferDescriptor, BufferUsage};
 use crate::resource::pipeline::GraphicsPipelineDescriptor;
+use crate::resource::render_pass::RenderPassDescriptor;
 use crate::util::format::TextureFormat;
 use bytemuck::Pod;
 use gfx_hal::format::Format;
+use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
 use gfx_hal::{device::Device, Backend};
 use log::debug;
 use std::{mem::ManuallyDrop, sync::Arc};
@@ -160,6 +163,7 @@ impl<B: Backend> GfxContext<B> {
 impl<B: Backend> GpuContext for GfxContext<B> {
     type BufferHandle = (B::Buffer, AllocationIndex);
     type PipelineHandle = B::GraphicsPipeline;
+    type RenderPassHandle = B::RenderPass;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -195,9 +199,43 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         self.heapy.deallocate(buffer.1);
     }
 
-    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle {
-        unimplemented!()
+    fn create_render_pass(&self, desc: &RenderPassDescriptor) -> Self::RenderPassHandle {
+        let attachments: Vec<Attachment> = desc
+            .attachments
+            .iter()
+            .map(|a| a.clone().convert())
+            .collect();
+        let compatible_subpasses: Vec<HalCompatibleSubpassDescriptor> =
+            desc.subpasses.iter().map(|s| s.clone().convert()).collect();
+        let dependencies: Vec<SubpassDependency> = desc
+            .pass_dependencies
+            .iter()
+            .map(|d| d.clone().convert())
+            .collect();
+        unsafe {
+            self.device
+                .create_render_pass(
+                    attachments,
+                    compatible_subpasses.iter().map(|s| SubpassDesc {
+                        colors: s.colors.as_slice(),
+                        depth_stencil: s.depth_stencil.map(|v| &v),
+                        inputs: s.inputs.as_slice(),
+                        resolves: s.resolves.as_slice(),
+                        preserves: s.preserves.as_slice(),
+                    }),
+                    dependencies,
+                )
+                .expect("[GfxContext] (create_render_pass) creation failed!")
+        }
     }
+
+    fn drop_render_pass(&self, rp: Self::RenderPassHandle) {
+        unsafe {
+            self.device.destroy_render_pass(rp);
+        }
+    }
+
+    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle {}
 
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle) {
         unsafe {

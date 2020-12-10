@@ -121,6 +121,27 @@ pub(crate) struct Viewport {
     scissor: PipelineState<ViewportRect>,
 }
 
+#[derive(Debug, Clone)]
+pub enum PipelineStage {
+    TopOfPipe,
+    DrawIndirect,
+    VertexInput,
+    VertexShader,
+    HullShader,
+    DomainShader,
+    GeometryShader,
+    FragmentShader,
+    EarlyFragmentTests,
+    LateFragmentTests,
+    ColorAttachmentOutput,
+    ComputeShader,
+    Transfer,
+    BottomOfPipe,
+    Host,
+    TaskShader,
+    MeshShader,
+}
+
 #[derive(Debug)]
 pub struct GraphicsPipelineDescriptor {
     pub(crate) name: Cow<'static, str>,

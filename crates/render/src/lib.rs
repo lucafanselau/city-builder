@@ -1,5 +1,8 @@
 #![feature(is_sorted)]
 
+#[cfg(test)]
+pub mod test_setup;
+
 pub mod context;
 pub mod gfx;
 pub mod resource;

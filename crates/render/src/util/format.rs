@@ -37,3 +37,50 @@ pub enum TextureFormat {
     Depth32Sfloat,
     Depth24PlusStencil8,
 }
+
+/// This is basically a copy from gfx-hal
+#[derive(Debug, Clone)]
+pub enum TextureLayout {
+    /// General purpose, no restrictions on usage.
+    General,
+    /// Must only be used as a color attachment in a framebuffer.
+    ColorAttachmentOptimal,
+    /// Must only be used as a depth attachment in a framebuffer.
+    DepthStencilAttachmentOptimal,
+    /// Must only be used as a depth attachment in a framebuffer,
+    /// or as a read-only depth or stencil buffer in a shader.
+    DepthStencilReadOnlyOptimal,
+    /// Must only be used as a read-only image in a shader.
+    ShaderReadOnlyOptimal,
+    /// Must only be used as the source for a transfer command.
+    TransferSrcOptimal,
+    /// Must only be used as the destination for a transfer command.
+    TransferDstOptimal,
+    /// No layout, does not support device access.  Only valid as a
+    /// source layout when transforming data to a specific destination
+    /// layout or initializing data.  Does NOT guarentee that the contents
+    /// of the source buffer are preserved.
+    Undefined,
+    /// Like `Undefined`, but does guarentee that the contents of the source
+    /// buffer are preserved.
+    Preinitialized,
+    /// The layout that an image must be in to be presented to the display.
+    Present,
+}
+
+#[derive(Debug, Clone)]
+pub enum ImageAccess {
+    InputAttachmentRead,
+    ShaderRead,
+    ShaderWrite,
+    ColorAttachmentRead,
+    ColorAttachmentWrite,
+    DepthStencilAttachmentRead,
+    DepthStencilAttachmentWrite,
+    TransferRead,
+    TransferWrite,
+    HostRead,
+    HostWrite,
+    MemoryRead,
+    MemoryWrite,
+}
