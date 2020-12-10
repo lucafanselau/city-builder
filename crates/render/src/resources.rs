@@ -1,6 +1,6 @@
 use crate::context::{CurrentContext, GpuContext};
 use crate::resource::buffer::{Buffer, BufferDescriptor};
-use crate::resource::pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor};
+use crate::resource::pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -18,8 +18,12 @@ impl GpuResources {
         Buffer::new(desc.name, handle, self.ctx.clone())
     }
 
-    pub fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> GraphicsPipeline {
-        let handle = self.ctx.create_graphics_pipeline(desc);
+    pub fn create_graphics_pipeline(
+        &self,
+        desc: &GraphicsPipelineDescriptor,
+        render_context: RenderContext<CurrentContext>,
+    ) -> GraphicsPipeline {
+        let handle = self.ctx.create_graphics_pipeline(desc, render_context);
         GraphicsPipeline::new(desc.name.clone(), handle, self.ctx.clone())
     }
 }

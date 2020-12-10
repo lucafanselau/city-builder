@@ -1,8 +1,9 @@
 use crate::context::GpuContext;
 use crate::gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType};
 use crate::gfx::heapy::{AllocationIndex, Heapy};
+use crate::gfx::plumber::Plumber;
 use crate::resource::buffer::{BufferDescriptor, BufferUsage};
-use crate::resource::pipeline::GraphicsPipelineDescriptor;
+use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use crate::resource::render_pass::RenderPassDescriptor;
 use crate::util::format::TextureFormat;
 use bytemuck::Pod;
@@ -33,6 +34,7 @@ where
     // Memory managment
     heapy: Heapy<B>,
     // Pipelines
+    plumber: Plumber<B>,
 }
 
 impl<B: Backend> GfxContext<B> {
@@ -147,6 +149,7 @@ impl<B: Backend> GfxContext<B> {
         };
 
         let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
+        let plumber = Plumber::<B>::new(device.clone());
 
         Self {
             instance,
@@ -156,6 +159,7 @@ impl<B: Backend> GfxContext<B> {
             device,
             queues,
             heapy,
+            plumber,
         }
     }
 }
@@ -164,6 +168,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     type BufferHandle = (B::Buffer, AllocationIndex);
     type PipelineHandle = B::GraphicsPipeline;
     type RenderPassHandle = B::RenderPass;
+    type ShaderCode = Vec<u32>;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -218,7 +223,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
                     attachments,
                     compatible_subpasses.iter().map(|s| SubpassDesc {
                         colors: s.colors.as_slice(),
-                        depth_stencil: s.depth_stencil.map(|v| &v),
+                        depth_stencil: s.depth_stencil.as_ref(),
                         inputs: s.inputs.as_slice(),
                         resolves: s.resolves.as_slice(),
                         preserves: s.preserves.as_slice(),
@@ -235,12 +240,22 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         }
     }
 
-    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle {}
+    fn create_graphics_pipeline(
+        &self,
+        desc: &GraphicsPipelineDescriptor,
+        render_context: RenderContext<Self>,
+    ) -> Self::PipelineHandle {
+        self.plumber.create_pipeline(desc, render_context)
+    }
 
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle) {
         unsafe {
             self.device.destroy_graphics_pipeline(pipeline);
         }
+    }
+
+    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode {
+        self.plumber.compile_shader(source)
     }
 
     fn get_surface_format(&self) -> TextureFormat {

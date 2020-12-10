@@ -41,10 +41,12 @@ pub struct SubpassDescriptor {
     pub preserves: Vec<usize>,
 }
 
+pub type SubpassId = u8;
+
 #[derive(Debug, Clone)]
 pub struct SubpassDependency {
     /// Meaning this is a dependency fromSrc..toDst, where None is equal to VK_SUBPASS_EXTERNAL
-    pub passes: Range<Option<u8>>,
+    pub passes: Range<Option<SubpassId>>,
     pub stages: Range<PipelineStage>,
     pub accesses: Range<ImageAccess>,
 }

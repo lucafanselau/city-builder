@@ -291,7 +291,7 @@ impl ToHalType for Attachment {
     fn convert(self) -> Self::Target {
         HalAttachment {
             format: Some(self.format.convert()),
-            samples: 0,
+            samples: 1,
             ops: AttachmentOps::new(self.load_op.convert(), self.store_op.convert()),
             stencil_ops: AttachmentOps::DONT_CARE,
             layouts: self.layouts.start.convert()..self.layouts.end.convert(),

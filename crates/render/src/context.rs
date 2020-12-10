@@ -1,5 +1,5 @@
 use crate::resource::buffer::BufferDescriptor;
-use crate::resource::pipeline::GraphicsPipelineDescriptor;
+use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use bytemuck::Pod;
 use raw_window_handle::HasRawWindowHandle;
 use std::fmt::Debug;
@@ -8,6 +8,7 @@ pub trait GpuContext: Send + Sync {
     type BufferHandle: Send + Sync + Debug;
     type PipelineHandle: Send + Sync + Debug;
     type RenderPassHandle: Send + Sync + Debug;
+    type ShaderCode: Debug + Send + Sized;
 
     // Oke we will need to create abstractions for all of these first
     // fn create_initialized_buffer(
@@ -31,8 +32,16 @@ pub trait GpuContext: Send + Sync {
     fn drop_render_pass(&self, rp: Self::RenderPassHandle);
 
     // Pipelines
-    fn create_graphics_pipeline(&self, desc: &GraphicsPipelineDescriptor) -> Self::PipelineHandle;
+    fn create_graphics_pipeline(
+        &self,
+        desc: &GraphicsPipelineDescriptor,
+        render_context: RenderContext<Self>,
+    ) -> Self::PipelineHandle;
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle);
+
+    // NOTE(luca): Maybe this should not be provided by context, or like more sleek, but for now
+    //  this is enough
+    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode;
 
     // fn create_texture()
     // fn create_initialized_texture()
