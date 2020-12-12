@@ -1,14 +1,17 @@
+use crate::resource::frame::{Clear, Extent3D};
 use crate::resource::pipeline::{
     AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
-    Primitive, Rasterizer, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate, Winding,
+    Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate,
+    Viewport, Winding,
 };
 use crate::resource::render_pass::{
     Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
     SubpassDescriptor,
 };
 use crate::util::format::{ImageAccess, TextureFormat, TextureLayout};
+use gfx_hal::command::{ClearColor, ClearDepthStencil, ClearValue};
 use gfx_hal::format::Format;
-use gfx_hal::image::{Access, Layout};
+use gfx_hal::image::{Access, Extent, Layout};
 use gfx_hal::memory::Dependencies;
 use gfx_hal::pass::{
     Attachment as HalAttachment, AttachmentId, AttachmentLoadOp as HalAttachmentLoadOp,
@@ -17,8 +20,9 @@ use gfx_hal::pass::{
 };
 use gfx_hal::pso::{
     AttributeDesc, DepthTest, Element, Face, FrontFace, PipelineStage as HalPipelineStage,
-    PolygonMode as HalPolygonMode, Primitive as HalPrimitive, Rasterizer as HalRasterizer, State,
-    VertexBufferDesc, VertexInputRate as HalInputRate,
+    PolygonMode as HalPolygonMode, Primitive as HalPrimitive, Rasterizer as HalRasterizer,
+    Rect as HalRect, State, VertexBufferDesc, VertexInputRate as HalInputRate,
+    Viewport as HalViewport,
 };
 
 pub trait ToHalType {
@@ -338,6 +342,62 @@ impl ToHalType for SubpassDependency {
             stages: self.stages.start.convert()..self.stages.end.convert(),
             accesses: self.accesses.start.convert()..self.accesses.end.convert(),
             flags: Dependencies::empty(),
+        }
+    }
+}
+
+impl ToHalType for Extent3D {
+    type Target = Extent;
+
+    fn convert(self) -> Self::Target {
+        Extent {
+            width: self.width,
+            height: self.height,
+            depth: self.depth,
+        }
+    }
+}
+
+impl ToHalType for Rect {
+    type Target = HalRect;
+
+    fn convert(self) -> Self::Target {
+        HalRect {
+            x: self.x,
+            y: self.y,
+            w: self.width,
+            h: self.height,
+        }
+    }
+}
+
+impl ToHalType for Viewport {
+    type Target = HalViewport;
+
+    fn convert(self) -> Self::Target {
+        HalViewport {
+            rect: self.rect.convert(),
+            depth: self.depth,
+        }
+    }
+}
+
+impl ToHalType for Clear {
+    type Target = ClearValue;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            Clear::Color(r, g, b, a) => ClearValue {
+                color: ClearColor {
+                    float32: [r, g, b, a],
+                },
+            },
+            Clear::Depth(d, s) => ClearValue {
+                depth_stencil: ClearDepthStencil {
+                    depth: d,
+                    stencil: s,
+                },
+            },
         }
     }
 }

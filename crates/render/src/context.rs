@@ -1,7 +1,11 @@
 use crate::resource::buffer::BufferDescriptor;
+use crate::resource::frame::Extent3D;
 use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
+use crate::util::format::TextureFormat;
 use bytemuck::Pod;
+use gfx_backend_vulkan as graphics_backend;
 use raw_window_handle::HasRawWindowHandle;
+use std::borrow::Borrow;
 use std::fmt::Debug;
 
 pub trait GpuContext: Send + Sync {
@@ -9,6 +13,12 @@ pub trait GpuContext: Send + Sync {
     type PipelineHandle: Send + Sync + Debug;
     type RenderPassHandle: Send + Sync + Debug;
     type ShaderCode: Debug + Send + Sized;
+    type ImageView: Debug + Send + Sync;
+    type Framebuffer: Debug + Send + Sync;
+    type CommandBuffer: Debug + Send + Sync;
+    /// eg. The Command buffer in recording state
+    type CommandEncoder: CommandEncoder<Self> + Debug + Send + Sync;
+    type SwapchainImage: Borrow<Self::ImageView> + Debug + Send + Sync;
 
     // Oke we will need to create abstractions for all of these first
     // fn create_initialized_buffer(
@@ -43,28 +53,38 @@ pub trait GpuContext: Send + Sync {
     //  this is enough
     fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode;
 
-    // fn create_texture()
-    // fn create_initialized_texture()
-    // And maybe something more sophisticated for attachments
-
     // TODO: if we want to support multi surface or headless drawing a surface can not be bound to
     //  the context...
     /// Will return the format of the created surface
     fn get_surface_format(&self) -> TextureFormat;
 
-    fn create_command_encoder(&self) {}
+    // Framebuffers
+    fn create_framebuffer<I>(
+        &self,
+        rp: &Self::RenderPassHandle,
+        attachments: I,
+        extent: Extent3D,
+    ) -> Self::Framebuffer
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Self::ImageView>;
 
-    fn submit_command(&self) {}
+    fn drop_framebuffer(&self, fb: Self::Framebuffer);
 
-    fn create_shader_module(&self) {}
+    // Rendering API
+    //
+    // This API is temporary and im not quite sure how to abstract that away
+    fn new_frame(&self) -> Self::SwapchainImage;
+    fn end_frame(&self, swapchain_image: Self::SwapchainImage, frame_commands: Self::CommandBuffer);
 
-    fn configure_swap_chain(&self) {}
+    fn render_command(&self, cb: impl FnOnce(&mut Self::CommandEncoder)) -> Self::CommandBuffer;
+
+    fn wait_idle(&self);
 }
 
 // here would be like #[cfg(feature = "gfx")] or something if we make this plug and play
+use crate::command_encoder::CommandEncoder;
 use crate::resource::render_pass::RenderPassDescriptor;
-use crate::util::format::TextureFormat;
-use gfx_backend_vulkan as graphics_backend;
 
 pub type CurrentContext = crate::gfx::gfx_context::GfxContext<graphics_backend::Backend>;
 

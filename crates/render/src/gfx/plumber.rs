@@ -5,17 +5,19 @@ use crate::resource::pipeline::{
 };
 use gfx_hal::pass::Subpass;
 use gfx_hal::pso::{
-    AttributeDesc, BasePipeline, BlendDesc, BlendState, ColorBlendDesc, ColorMask,
+    AttributeDesc, BakedStates, BasePipeline, BlendDesc, BlendState, ColorBlendDesc, ColorMask,
     DepthStencilDesc, EntryPoint, GraphicsPipelineDesc, InputAssemblerDesc, PipelineCreationFlags,
     PrimitiveAssemblerDesc, ShaderStageFlags, VertexBufferDesc,
 };
 use gfx_hal::{device::Device, Backend};
 use parking_lot::Mutex;
 use shaderc::Compiler;
+use std::borrow::Cow;
 use std::fmt::{Debug, Formatter, Result};
 use std::iter;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -116,6 +118,20 @@ impl<B: Backend> Plumber<B> {
             stencil: None,
         };
 
+        let baked_states = BakedStates {
+            viewport: desc
+                .pipeline_states
+                .viewport
+                .to_option()
+                .map(|v| v.convert()),
+            scissor: desc
+                .pipeline_states
+                .scissor
+                .to_option()
+                .map(|r| r.convert()),
+            ..Default::default()
+        };
+
         // The subpass
         let subpass = match render_context {
             RenderContext::RenderPass((rp, id)) => Subpass {
@@ -148,7 +164,7 @@ impl<B: Backend> Plumber<B> {
             },
             depth_stencil,
             multisampling: None,
-            baked_states: Default::default(),
+            baked_states,
             layout: self.empty_layout.deref(),
             subpass,
             flags: PipelineCreationFlags::empty(),
@@ -172,9 +188,9 @@ impl<B: Backend> Plumber<B> {
 
     fn compile_glsl(
         &self,
-        source: &'static str,
+        source: &str,
         shader_type: ShaderType,
-        name: &'static str,
+        name: &str,
     ) -> anyhow::Result<Vec<u32>> {
         use shaderc::*;
         let shader_kind = match shader_type {
@@ -199,9 +215,37 @@ impl<B: Backend> Plumber<B> {
         Ok(binary_result.as_binary().to_vec())
     }
 
+    fn load_file(path: Cow<'static, Path>) -> String {
+        use std::fs;
+        fs::read_to_string(path).expect("[Plumber] failed to load shader file")
+    }
+
     pub(crate) fn compile_shader(&self, source: ShaderSource) -> Vec<u32> {
         match source {
-            ShaderSource::GlslFile(_) => unimplemented!(),
+            ShaderSource::GlslFile(path) => {
+                let source = Self::load_file(path.clone());
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_str().expect("[Plumber] OsString was invalid unicode"))
+                    .unwrap_or("unknown-file-name");
+
+                let shader_type = match path.extension() {
+                    Some(extension) => match extension
+                        .to_str()
+                        .expect("[Plumber] OsStr was not valid unicode")
+                    {
+                        "vert" => ShaderType::Vertex,
+                        "frag" => ShaderType::Fragment,
+                        "geometry" => ShaderType::Geometry,
+                        "compute" => ShaderType::Compute,
+                        _ => panic!("[Plumber] unknown shader extension: {:#?}", extension),
+                    },
+                    None => panic!("[Plumber] path had no valid extension name"),
+                };
+
+                self.compile_glsl(source.as_str(), shader_type, name)
+                    .unwrap()
+            }
             ShaderSource::GlslSource((source, shader_type, name)) => self
                 .compile_glsl(source, shader_type, name.unwrap_or("unknown-inline-shader"))
                 .unwrap(),

@@ -1,22 +1,31 @@
 use crate::context::GpuContext;
 use crate::gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType};
+use crate::gfx::gfx_command::GfxCommand;
 use crate::gfx::heapy::{AllocationIndex, Heapy};
 use crate::gfx::plumber::Plumber;
+use crate::gfx::swapper::Swapper;
 use crate::resource::buffer::{BufferDescriptor, BufferUsage};
+use crate::resource::frame::Extent3D;
 use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use crate::resource::render_pass::RenderPassDescriptor;
 use crate::util::format::TextureFormat;
 use bytemuck::Pod;
 use gfx_hal::format::Format;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
+use gfx_hal::queue::QueueFamilyId;
+use gfx_hal::window::PresentationSurface;
 use gfx_hal::{device::Device, Backend};
 use log::debug;
+use parking_lot::Mutex;
+use std::borrow::Borrow;
 use std::{mem::ManuallyDrop, sync::Arc};
 
 #[derive(Debug)]
 struct Queues<B: Backend> {
-    graphics: B::CommandQueue,
-    compute: B::CommandQueue,
+    graphics: Mutex<B::CommandQueue>,
+    graphics_family: QueueFamilyId,
+    compute: Mutex<B::CommandQueue>,
+    compute_family: QueueFamilyId,
 }
 
 /// This is the GFX-hal implementation of the Rendering Context described in mod.rs
@@ -27,14 +36,14 @@ where
 {
     instance: B::Instance,
     device: Arc<B::Device>,
-    adapter: gfx_hal::adapter::Adapter<B>,
-    surface: ManuallyDrop<B::Surface>,
-    surface_format: TextureFormat,
+    adapter: Arc<gfx_hal::adapter::Adapter<B>>,
     queues: Queues<B>,
     // Memory managment
     heapy: Heapy<B>,
     // Pipelines
     plumber: Plumber<B>,
+    // Swapchain
+    swapper: Swapper<B>,
 }
 
 impl<B: Backend> GfxContext<B> {
@@ -121,8 +130,10 @@ impl<B: Backend> GfxContext<B> {
                 .expect("No compute queue");
 
             let queues = Queues {
-                graphics: graphics_family.queues.remove(0),
-                compute: compute_family.queues.remove(0),
+                graphics: Mutex::new(graphics_family.queues.remove(0)),
+                graphics_family: graphics_family.family,
+                compute: Mutex::new(compute_family.queues.remove(0)),
+                compute_family: compute_family.family,
             };
 
             (Arc::new(device), queues)
@@ -148,18 +159,26 @@ impl<B: Backend> GfxContext<B> {
                 .expect("[GfxContext] failed to convert surface format")
         };
 
+        let adapter = Arc::new(adapter);
+
         let heapy = Heapy::<B>::new(device.clone(), &adapter.physical_device);
         let plumber = Plumber::<B>::new(device.clone());
+        let swapper = Swapper::<B>::new(
+            device.clone(),
+            adapter.clone(),
+            surface,
+            surface_format,
+            queues.graphics_family,
+        );
 
         Self {
             instance,
-            surface: ManuallyDrop::new(surface),
-            surface_format,
             adapter,
             device,
             queues,
             heapy,
             plumber,
+            swapper,
         }
     }
 }
@@ -169,6 +188,12 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     type PipelineHandle = B::GraphicsPipeline;
     type RenderPassHandle = B::RenderPass;
     type ShaderCode = Vec<u32>;
+    type ImageView = B::ImageView;
+    type Framebuffer = B::Framebuffer;
+    type CommandBuffer = B::CommandBuffer;
+    type CommandEncoder = GfxCommand<B>;
+    type SwapchainImage =
+        <<B as gfx_hal::Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -259,7 +284,58 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     }
 
     fn get_surface_format(&self) -> TextureFormat {
-        self.surface_format.clone()
+        self.swapper.get_surface_format()
+    }
+
+    fn create_framebuffer<I>(
+        &self,
+        rp: &Self::RenderPassHandle,
+        attachments: I,
+        extent: Extent3D,
+    ) -> Self::Framebuffer
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Self::ImageView>,
+    {
+        unsafe {
+            self.device
+                .create_framebuffer(rp, attachments, extent.convert())
+                .expect("[GfxContext] (create_framebuffer) framebuffer creation failed")
+        }
+    }
+
+    fn drop_framebuffer(&self, fb: Self::Framebuffer) {
+        unsafe {
+            self.device.destroy_framebuffer(fb);
+        }
+    }
+
+    fn new_frame(&self) -> Self::SwapchainImage {
+        match self.swapper.new_frame() {
+            Ok(i) => i,
+            Err(_) => {
+                // Try again, this will reconfigure the swapchain
+                self.swapper.new_frame().unwrap()
+            }
+        }
+    }
+
+    fn end_frame(
+        &self,
+        swapchain_image: Self::SwapchainImage,
+        frame_commands: Self::CommandBuffer,
+    ) {
+        let mut graphics_queue = self.queues.graphics.lock();
+        self.swapper
+            .end_frame(swapchain_image, frame_commands, &mut graphics_queue)
+    }
+
+    fn render_command(&self, cb: impl FnOnce(&mut Self::CommandEncoder)) -> Self::CommandBuffer {
+        self.swapper.render_command(cb)
+    }
+
+    fn wait_idle(&self) {
+        self.device.wait_idle().expect("failed to wait idle");
     }
 }
 

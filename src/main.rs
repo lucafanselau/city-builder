@@ -22,7 +22,6 @@ use render::resource::buffer::{BufferDescriptor, BufferUsage, MemoryType};
 use std::borrow::Borrow;
 use std::sync::Arc;
 
-use bytemuck::__core::time::Duration;
 use bytemuck::{Pod, Zeroable};
 use render::context::GpuContext;
 use render::resource::pipeline::{
@@ -34,37 +33,7 @@ use render::resource::render_pass::{
 };
 use render::util::format::TextureLayout;
 use std::ops::Deref;
-
-#[derive(Copy, Clone, Zeroable, Pod)]
-#[repr(C)]
-struct SampleData {
-    a: u32,
-    b: u32,
-}
-
-const VERTEX_SHADER: &str = r#"
-#version 450
-
-vec2 positions[3] = vec2[](
-    vec2(0.0, -0.5),
-    vec2(0.5, 0.5),
-    vec2(-0.5, 0.5)
-);
-
-void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-}
-"#;
-
-const FRAGMENT_SHADER: &str = r#"
-#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(location = 0) out vec4 outColor;
-
-void main() {
-    outColor = vec4(1.0, 0.0, 0.0, 1.0);
-}"#;
+use std::path::Path;
 
 fn main() {
     let _logger = {
@@ -87,98 +56,7 @@ fn main() {
     let (_event_loop, window) =
         window::create_window("Mightycity", window_size).expect("failed to create a window");
 
-    let ctx = Arc::new(render::context::create_render_context::<
-        winit::window::Window,
-    >(window.borrow()));
-
-    info!("Surface format is {:#?}", ctx.get_surface_format());
-
-    let resources = render::resources::GpuResources::new(ctx.clone());
-
-    let buffer = resources.create_empty_buffer(BufferDescriptor {
-        name: "test_buffer".into(),
-        size: 4,
-        memory_type: MemoryType::HostVisible,
-        usage: BufferUsage::Uniform,
-    });
-
-    let sample_data = SampleData { a: 17, b: 21 };
-    unsafe {
-        ctx.write_to_buffer(buffer.deref(), &sample_data);
-    }
-
-    let _pipeline = {
-        use render::resource::pipeline::ShaderSource;
-        let vertex_code = ctx.compile_shader(ShaderSource::GlslSource((
-            VERTEX_SHADER,
-            ShaderType::Vertex,
-            Some("simple_vertex_shader"),
-        )));
-        let fragment_code = ctx.compile_shader(ShaderSource::GlslSource((
-            FRAGMENT_SHADER,
-            ShaderType::Fragment,
-            Some("simple_fragment_shader"),
-        )));
-
-        let render_pass = {
-            let color_attachment = Attachment {
-                format: ctx.get_surface_format(),
-                load_op: AttachmentLoadOp::Clear,
-                store_op: AttachmentStoreOp::Store,
-                layouts: TextureLayout::Undefined..TextureLayout::Present,
-            };
-
-            let subpass = SubpassDescriptor {
-                colors: vec![(0, TextureLayout::ColorAttachmentOptimal)],
-                depth_stencil: None,
-                inputs: vec![],
-                resolves: vec![],
-                preserves: vec![],
-            };
-
-            let desc = RenderPassDescriptor {
-                attachments: vec![color_attachment],
-                subpasses: vec![subpass],
-                pass_dependencies: vec![],
-            };
-
-            ctx.create_render_pass(&desc)
-        };
-
-        let desc = GraphicsPipelineDescriptor {
-            name: "simple_pipeline".into(),
-            shaders: PipelineShaders {
-                vertex: vertex_code,
-                fragment: fragment_code,
-                geometry: None,
-            },
-            rasterizer: Rasterizer {
-                polygon_mode: PolygonMode::Fill,
-                culling: Culling {
-                    winding: Winding::Clockwise,
-                    cull_face: CullFace::None,
-                },
-            },
-            vertex_buffers: vec![],
-            attributes: vec![],
-            primitive: Primitive::TriangleList,
-            blend_targets: vec![true],
-            depth: None,
-            viewport: Viewport {
-                viewport: PipelineState::Dynamic,
-                scissor: PipelineState::Dynamic,
-            },
-        };
-
-        let pipeline =
-            resources.create_graphics_pipeline(&desc, RenderContext::RenderPass((&render_pass, 0)));
-
-        ctx.drop_render_pass(render_pass);
-
-        pipeline
-    };
-
-    std::thread::sleep(Duration::from_secs(2));
+    render::test_renderer::test_renderer::<winit::window::Window>(window.borrow(), (1600, 900));
 }
 
 fn old_main() {

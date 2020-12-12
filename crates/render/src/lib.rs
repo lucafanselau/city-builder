@@ -1,10 +1,11 @@
 #![feature(is_sorted)]
 
-#[cfg(test)]
-pub mod test_setup;
+pub mod test_renderer;
 
+pub(crate) mod gfx;
+
+pub mod command_encoder;
 pub mod context;
-pub mod gfx;
 pub mod resource;
 pub mod resources;
 pub mod util;

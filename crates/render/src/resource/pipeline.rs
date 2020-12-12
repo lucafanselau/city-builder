@@ -4,7 +4,7 @@ use crate::util::format::TextureFormat;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -135,18 +135,33 @@ impl<T: Clone + Debug> Clone for PipelineState<T> {
     }
 }
 
+impl<T: Debug + Clone> PipelineState<T> {
+    pub fn to_option(&self) -> Option<T> {
+        match self {
+            PipelineState::Baked(t) => Some(t.clone()),
+            PipelineState::Dynamic => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct ViewportRect {
-    x: i16,
-    y: i16,
-    width: i16,
-    height: i16,
+pub struct Rect {
+    pub x: i16,
+    pub y: i16,
+    pub width: i16,
+    pub height: i16,
 }
 
 #[derive(Debug, Clone)]
 pub struct Viewport {
-    pub viewport: PipelineState<ViewportRect>,
-    pub scissor: PipelineState<ViewportRect>,
+    pub rect: Rect,
+    pub depth: Range<f32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PipelineStates {
+    pub viewport: PipelineState<Viewport>,
+    pub scissor: PipelineState<Rect>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,7 +207,7 @@ pub struct GraphicsPipelineDescriptor {
     /// Enable a depth testing function
     pub depth: Option<DepthDescriptor>, // TODO: Multisampling
     /// The viewport for this pipeline
-    pub viewport: Viewport,
+    pub pipeline_states: PipelineStates,
     // TODO: Descriptors? !!!!
 }
 

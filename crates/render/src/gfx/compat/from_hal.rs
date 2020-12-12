@@ -1,5 +1,7 @@
+use crate::resource::pipeline::Rect;
 use crate::util::format::TextureFormat;
 use gfx_hal::format::Format;
+use gfx_hal::image::Extent;
 
 pub trait FromHalType {
     type Target;
