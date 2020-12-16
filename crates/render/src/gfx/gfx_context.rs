@@ -1,5 +1,3 @@
-use crate::context::GpuContext;
-use crate::gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType};
 use crate::gfx::gfx_command::GfxCommand;
 use crate::gfx::heapy::{AllocationIndex, Heapy};
 use crate::gfx::plumber::Plumber;
@@ -9,16 +7,27 @@ use crate::resource::frame::Extent3D;
 use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use crate::resource::render_pass::RenderPassDescriptor;
 use crate::util::format::TextureFormat;
+use crate::{context::GpuContext, resource::glue::DescriptorWrite};
+use crate::{
+    gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType},
+    resource::glue::Mixture,
+};
 use bytemuck::Pod;
 use gfx_hal::format::Format;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
 use gfx_hal::queue::QueueFamilyId;
 use gfx_hal::window::PresentationSurface;
+use gfx_hal::{
+    adapter::{Adapter, DeviceType},
+    pool,
+};
 use gfx_hal::{device::Device, Backend};
-use log::debug;
+use log::{debug, info};
 use parking_lot::Mutex;
 use std::borrow::Borrow;
 use std::{mem::ManuallyDrop, sync::Arc};
+
+use super::pool::{LayoutHandle, Pool, SetHandle};
 
 #[derive(Debug)]
 struct Queues<B: Backend> {
@@ -44,6 +53,8 @@ where
     plumber: Plumber<B>,
     // Swapchain
     swapper: Swapper<B>,
+    // Pool -> Descriptor Sets
+    pool: Pool<B>,
 }
 
 impl<B: Backend> GfxContext<B> {
@@ -74,15 +85,34 @@ impl<B: Backend> GfxContext<B> {
         use gfx_hal::window::Surface;
         // our adapter selection is a bit more sophisticated
         // atm we just check if we have a graphics card that is capable of rendering to our screen
-        let adapter = adapters
+        let rated_adapters: Vec<(u64, Adapter<B>)> = adapters
             .into_iter()
-            .find(|a| {
+            .filter(|a| {
                 a.queue_families.iter().any(|qf| {
                     qf.queue_type().supports_graphics() && surface.supports_queue_family(qf)
                 })
             })
-            .expect("couldn't find suitable adapter");
-        debug!("Selected: {:?}", adapter.info);
+            .map(|a| {
+                let mut score = 0u64;
+                if a.queue_families
+                    .iter()
+                    .any(|qf| qf.queue_type().supports_compute())
+                {
+                    score += 20u64;
+                }
+                if a.info.device_type == DeviceType::DiscreteGpu {
+                    score += 1000u64;
+                }
+                (score, a)
+            })
+            .collect();
+
+        let (score, adapter) = rated_adapters
+            .into_iter()
+            .max_by(|a, b| a.0.cmp(&b.0))
+            .expect("[GfxContext] failed to find suitable gpu");
+
+        info!("Selected: {:?} (with score: {})", adapter.info, score);
 
         let (device, queues) = {
             // need to find the queue_family
@@ -171,6 +201,8 @@ impl<B: Backend> GfxContext<B> {
             queues.graphics_family,
         );
 
+        let pool = Pool::<B>::new(device.clone());
+
         Self {
             instance,
             adapter,
@@ -179,18 +211,21 @@ impl<B: Backend> GfxContext<B> {
             heapy,
             plumber,
             swapper,
+            pool,
         }
     }
 }
 
 impl<B: Backend> GpuContext for GfxContext<B> {
     type BufferHandle = (B::Buffer, AllocationIndex);
-    type PipelineHandle = B::GraphicsPipeline;
+    type PipelineHandle = (B::GraphicsPipeline, B::PipelineLayout);
     type RenderPassHandle = B::RenderPass;
     type ShaderCode = Vec<u32>;
     type ImageView = B::ImageView;
     type Framebuffer = B::Framebuffer;
     type CommandBuffer = B::CommandBuffer;
+    type DescriptorLayout = LayoutHandle<B>;
+    type DescriptorSet = SetHandle<B>;
     type CommandEncoder = GfxCommand<B>;
     type SwapchainImage =
         <<B as gfx_hal::Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
@@ -267,7 +302,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
 
     fn create_graphics_pipeline(
         &self,
-        desc: &GraphicsPipelineDescriptor,
+        desc: GraphicsPipelineDescriptor<Self>,
         render_context: RenderContext<Self>,
     ) -> Self::PipelineHandle {
         self.plumber.create_pipeline(desc, render_context)
@@ -275,7 +310,8 @@ impl<B: Backend> GpuContext for GfxContext<B> {
 
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle) {
         unsafe {
-            self.device.destroy_graphics_pipeline(pipeline);
+            self.device.destroy_graphics_pipeline(pipeline.0);
+            self.device.destroy_pipeline_layout(pipeline.1);
         }
     }
 
@@ -308,6 +344,32 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         unsafe {
             self.device.destroy_framebuffer(fb);
         }
+    }
+
+    fn create_descriptor_layout<I>(&self, parts: I) -> Self::DescriptorLayout
+    where
+        I: IntoIterator<Item = crate::resource::glue::MixturePart>,
+    {
+        self.pool.create_layout(parts)
+    }
+
+    fn drop_descriptor_layout(&self, handle: Self::DescriptorLayout) {
+        self.pool.drop_layout(handle)
+    }
+
+    fn create_descriptor_set(&self, layout: &Mixture<Self>) -> Self::DescriptorSet {
+        self.pool.allocate_set(layout)
+    }
+    fn drop_descriptor_set(&self, handle: Self::DescriptorSet) {
+        self.pool.free_set(handle)
+    }
+
+    fn update_descriptor_set(
+        &self,
+        handle: &Self::DescriptorSet,
+        writes: Vec<DescriptorWrite<Self>>,
+    ) {
+        self.pool.write_set(handle, writes)
     }
 
     fn new_frame(&self) -> Self::SwapchainImage {
@@ -354,6 +416,7 @@ fn get_buffer_usage(desc: &BufferDescriptor) -> gfx_hal::buffer::Usage {
         BufferUsage::Vertex => Usage::VERTEX,
         BufferUsage::Index => Usage::INDEX,
     };
+
     if desc.memory_type == MemoryType::DeviceLocal {
         usage | Usage::TRANSFER_DST
     } else {

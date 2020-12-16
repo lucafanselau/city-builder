@@ -1,14 +1,16 @@
-use crate::command_encoder::CommandEncoder;
 use crate::context::GpuContext;
 use crate::gfx::compat::ToHalType;
 use crate::gfx::gfx_context::GfxContext;
+use crate::resource::buffer::BufferRange;
 use crate::resource::frame::Clear;
 use crate::resource::pipeline::{Rect, Viewport};
+use crate::{command_encoder::CommandEncoder, resource::glue::Glue};
 use bytemuck::__core::ops::Range;
 use gfx_hal::adapter::Adapter;
 use gfx_hal::command::{ClearValue, CommandBuffer, SubpassContents};
 use gfx_hal::Backend;
 use std::sync::Arc;
+use std::{borrow::Borrow, iter};
 
 #[derive(Debug)]
 pub struct GfxCommand<B: Backend> {
@@ -69,13 +71,41 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
 
     fn bind_graphics_pipeline(&mut self, pipeline: &<GfxContext<B> as GpuContext>::PipelineHandle) {
         unsafe {
-            self.command.bind_graphics_pipeline(pipeline);
+            self.command.bind_graphics_pipeline(&pipeline.0);
+        }
+    }
+
+    fn bind_vertex_buffer(
+        &mut self,
+        binding: u32,
+        buffer: &<GfxContext<B> as GpuContext>::BufferHandle,
+        range: BufferRange,
+    ) {
+        unsafe {
+            self.command
+                .bind_vertex_buffers(binding, iter::once((&buffer.0, range.convert())))
         }
     }
 
     fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
         unsafe {
             self.command.draw(vertices, instances);
+        }
+    }
+
+    fn snort_glue(
+        &mut self,
+        set_idx: usize,
+        pipeline: &<GfxContext<B> as GpuContext>::PipelineHandle,
+        glue: &Glue<GfxContext<B>>,
+    ) {
+        unsafe {
+            self.command.bind_graphics_descriptor_sets(
+                &pipeline.1,
+                set_idx,
+                vec![&glue.handle.1],
+                Vec::<&u32>::new(),
+            )
         }
     }
 }

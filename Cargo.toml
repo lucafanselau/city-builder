@@ -12,7 +12,7 @@ members = ["crates/ecs", "crates/render"]
 [dependencies]
 winit = "0.22.1"
 log = "0.4.11"
-simplelog = "0.7.6"
+simplelog = { path = "../simplelog.rs" }
 gfx-hal = "0.5"
 # First we will just stick to vulkan so
 gfx-backend-vulkan = "0.5"

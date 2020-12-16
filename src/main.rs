@@ -32,6 +32,7 @@ use render::resource::render_pass::{
     Attachment, AttachmentLoadOp, AttachmentStoreOp, RenderPassDescriptor, SubpassDescriptor,
 };
 use render::util::format::TextureLayout;
+use std::io::{stdin, Read};
 use std::ops::Deref;
 use std::path::Path;
 
@@ -40,10 +41,11 @@ fn main() {
         use simplelog::{ConfigBuilder, TermLogger, TerminalMode};
 
         let config = ConfigBuilder::new()
-            .set_location_level(LevelFilter::Warn)
+            .add_filter_ignore_str("gfx_backend_vulkan")
+            .set_ignore_level(LevelFilter::Info)
             .build();
 
-        TermLogger::init(LevelFilter::Warn, config, TerminalMode::Mixed).unwrap()
+        TermLogger::init(LevelFilter::Info, config, TerminalMode::Mixed).unwrap()
     };
 
     let _schedule = {

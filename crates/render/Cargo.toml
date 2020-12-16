@@ -19,3 +19,8 @@ bytemuck = { version =  "1.4.1", features = ["derive"] }
 
 # I really dont want to add shaderc, but because of a lack of better alternatives, here we go
 shaderc = "0.7.0"
+
+# Dependencies used for our easy render testing
+[dev-dependencies]
+winit = "0.24.0"
+simplelog = { path = "../../../simplelog.rs" }

@@ -1,11 +1,11 @@
 #version 450
 
-vec2 positions[3] = vec2[](
-vec2(0.0, -0.5),
-vec2(0.5, 0.5),
-vec2(-0.5, 0.5)
-);
+layout (location = 0) in vec4 in_pos;
+
+layout (binding = 0) uniform Offset {
+       vec4 offset;
+} offset;
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    gl_Position = vec4(in_pos.x + offset.offset[gl_VertexIndex], in_pos.yzw);
 }

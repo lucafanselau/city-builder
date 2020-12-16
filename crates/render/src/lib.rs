@@ -1,7 +1,5 @@
 #![feature(is_sorted)]
 
-pub mod test_renderer;
-
 pub(crate) mod gfx;
 
 pub mod command_encoder;
@@ -9,6 +7,11 @@ pub mod context;
 pub mod resource;
 pub mod resources;
 pub mod util;
+
+pub mod test_renderer;
+
+// #[cfg(test)]
+// pub mod replay;
 
 /// This is where we want to go (at least) roughly with our implementation
 // struct Graph {}

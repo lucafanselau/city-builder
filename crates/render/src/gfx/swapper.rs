@@ -190,9 +190,7 @@ impl<B: Backend> Swapper<B> {
             // Now we also need to delete the command buffer in use
             if this_frame.in_use_command.is_some() {
                 let command_buffer = this_frame.in_use_command.take().unwrap();
-                unsafe {
-                    self.command_pool.lock().free(vec![command_buffer]);
-                }
+                self.command_pool.lock().free(vec![command_buffer]);
             }
         };
 

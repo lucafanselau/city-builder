@@ -1,31 +1,47 @@
-use crate::command_encoder::CommandEncoder;
-use crate::context::{create_render_context, GpuContext};
-use crate::resource::buffer::{BufferDescriptor, BufferUsage, MemoryType};
+use crate::resource::buffer::{BufferDescriptor, BufferRange, BufferUsage, MemoryType};
 use crate::resource::frame::{Clear, Extent3D};
 use crate::resource::pipeline::{
-    CullFace, Culling, GraphicsPipelineDescriptor, PipelineShaders, PipelineState, PipelineStates,
-    PolygonMode, Primitive, Rasterizer, Rect, RenderContext, ShaderSource, Viewport, Winding,
+    AttributeDescriptor, CullFace, Culling, GraphicsPipelineDescriptor, PipelineShaders,
+    PipelineState, PipelineStates, PolygonMode, Primitive, Rasterizer, Rect, RenderContext,
+    ShaderSource, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate, Viewport,
+    Winding,
 };
 use crate::resource::render_pass::{
     Attachment, AttachmentLoadOp, AttachmentStoreOp, RenderPassDescriptor, SubpassDescriptor,
 };
 use crate::resources::GpuResources;
 use crate::util::format::TextureLayout;
+use crate::{command_encoder::CommandEncoder, resource::glue};
+use crate::{
+    context::{create_render_context, GpuContext},
+    resource::glue::PartIndex,
+};
 use bytemuck::{Pod, Zeroable};
-use gfx_hal::image::Extent;
 use log::info;
+use log::warn;
 use raw_window_handle::HasRawWindowHandle;
 use std::borrow::Borrow;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
-struct SampleData {
-    a: u32,
-    b: u32,
+struct Vertex {
+    pos: [f32; 4],
+}
+
+#[derive(Copy, Clone, Zeroable, Pod)]
+#[repr(C)]
+struct Offset {
+    offset: [f32; 4],
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct ShaderCamera {
+    view_projection: [[f32; 4]; 4],
 }
 
 pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
@@ -35,17 +51,57 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
 
     let resources = GpuResources::new(ctx.clone());
 
-    let buffer = resources.create_empty_buffer(BufferDescriptor {
-        name: "test_buffer".into(),
-        size: 4,
+    let vertices = [
+        Vertex {
+            pos: [-0.5, -0.5, 0.0, 1.0],
+        },
+        Vertex {
+            pos: [0.0, 0.5, 0.0, 1.0],
+        },
+        Vertex {
+            pos: [0.5, -0.5, 0.0, 1.0],
+        },
+    ];
+    let vertex_size = std::mem::size_of::<Vertex>();
+
+    let vertex_buffer = resources.create_empty_buffer(BufferDescriptor {
+        name: "Simple Vertex Buffer".into(),
+        size: (vertex_size * vertices.len()) as u64,
+        memory_type: MemoryType::HostVisible,
+        usage: BufferUsage::Vertex,
+    });
+
+    unsafe {
+        ctx.write_to_buffer(&vertex_buffer, &vertices);
+    }
+
+    let offset = Offset {
+        offset: [-0.2, 0.12, -0.4, 0.0],
+    };
+
+    let offset_buffer = resources.create_empty_buffer(BufferDescriptor {
+        name: "Offset Uniform Buffer".into(),
+        size: std::mem::size_of::<Offset>() as u64,
         memory_type: MemoryType::HostVisible,
         usage: BufferUsage::Uniform,
     });
 
-    let sample_data = SampleData { a: 17, b: 21 };
     unsafe {
-        ctx.write_to_buffer(buffer.deref(), &sample_data);
+        ctx.write_to_buffer(&offset_buffer, &offset);
     }
+
+    // Which is the equivalent of a DescriptorSetLayout
+    let parts = crate::mixture![
+        0: "offset" in Vertex: Offset
+        // 1: "camera" in Vertex: ShaderCamera,
+        // 2: "material" in Fragment: [dynamic Material],
+        // 2: "albedo" in Fragment: sampler
+    ];
+
+    // info!("{:#?}", mixture);
+
+    let mixture = resources.stir(parts);
+    // let glue = ctx.snort_glue(&mixture);
 
     let (pipeline, render_pass) = {
         let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
@@ -82,6 +138,7 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
 
         let desc = GraphicsPipelineDescriptor {
             name: "simple_pipeline".into(),
+            mixtures: vec![&mixture],
             shaders: PipelineShaders {
                 vertex: vertex_code,
                 fragment: fragment_code,
@@ -94,8 +151,17 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
                     cull_face: CullFace::None,
                 },
             },
-            vertex_buffers: vec![],
-            attributes: vec![],
+            vertex_buffers: vec![VertexBufferDescriptor {
+                binding: 0,
+                stride: vertex_size as u32,
+                rate: VertexInputRate::Vertex,
+            }],
+            attributes: vec![AttributeDescriptor {
+                location: 0,
+                binding: 0,
+                offset: 0,
+                format: VertexAttributeFormat::Vec4,
+            }],
             primitive: Primitive::TriangleList,
             blend_targets: vec![true],
             depth: None,
@@ -106,16 +172,45 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
         };
 
         let pipeline =
-            resources.create_graphics_pipeline(&desc, RenderContext::RenderPass((&render_pass, 0)));
+            resources.create_graphics_pipeline(desc, RenderContext::RenderPass((&render_pass, 0)));
 
         (pipeline, render_pass)
     };
 
+    let mut glue_bottle = resources.bottle(&mixture);
+    // glue_bottle.write_array(PartIndex::Name("lights".into()), &lights_buffer, None);
+    //glue_bottle.write_buffer(PartIndex::Binding(1), &camera_buffer, None);
+    glue_bottle.write_buffer(PartIndex::Name("offset".into()), &offset_buffer, None);
+    // TODO: Images at all, so probably not implemented in the near future
+    // glue.write_sampler(glue::Index::Name("albedo"), &image_view, &sampler);
+
+    // Actually executing the writes
+    let glue = glue_bottle.apply();
+
     let mut running = true;
-    let now = std::time::Instant::now();
+    let startup = Instant::now();
+    let mut last_frame = startup.clone();
+    let mut counter = 0f64;
+    let mut frames = 0u32;
+    warn!("starting..");
     while running {
-        if now.elapsed().as_millis() > 2000 {
+        if startup.elapsed().as_millis() > 6000 {
             running = false;
+        }
+
+        let now = Instant::now();
+
+        {
+            frames += 1;
+            let delta = now.duration_since(last_frame).as_secs_f64();
+            // warn!("frame: delta: {}", delta);
+            last_frame = now.clone();
+            counter += delta;
+            if counter >= 1f64 {
+                counter -= 1f64;
+                info!("fps: {}", frames);
+                frames = 0;
+            }
         }
 
         let swapchain_image = ctx.new_frame();
@@ -150,9 +245,12 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
 
             cmd.bind_graphics_pipeline(&pipeline);
 
-            // TODO: Dynamic viewport and scissor
             cmd.set_viewport(0, viewport.clone());
             cmd.set_scissor(0, viewport.rect);
+
+            cmd.bind_vertex_buffer(0, vertex_buffer.deref(), BufferRange::WHOLE);
+
+            cmd.snort_glue(0, &pipeline, &glue);
 
             cmd.draw(0..3, 0..1);
 

@@ -74,9 +74,9 @@ impl<B: Backend> Plumber<B> {
 
     pub(crate) fn create_pipeline(
         &self,
-        desc: &GraphicsPipelineDescriptor,
+        desc: GraphicsPipelineDescriptor<GfxContext<B>>,
         render_context: RenderContext<GfxContext<B>>,
-    ) -> B::GraphicsPipeline {
+    ) -> (B::GraphicsPipeline, B::PipelineLayout) {
         let vertex_shader = self
             .create_shader_module(Some(&desc.shaders.vertex))
             .unwrap();
@@ -118,7 +118,7 @@ impl<B: Backend> Plumber<B> {
             stencil: None,
         };
 
-        let baked_states = BakedStates {
+        let baked_states: BakedStates = BakedStates {
             viewport: desc
                 .pipeline_states
                 .viewport
@@ -130,6 +130,26 @@ impl<B: Backend> Plumber<B> {
                 .to_option()
                 .map(|r| r.convert()),
             ..Default::default()
+        };
+
+        let layout = unsafe {
+            let set_layouts: Vec<&B::DescriptorSetLayout> = desc
+                .mixtures
+                .into_iter()
+                .map(|m| -> &<B as Backend>::DescriptorSetLayout { &m.gpu_layout.handle.1 })
+                .collect();
+            self.device
+                .create_pipeline_layout(
+                    set_layouts,
+                    iter::empty::<(ShaderStageFlags, std::ops::Range<u32>)>(),
+                )
+                .expect(
+                    format!(
+                        "[Plumber] failed to create pipeline layout for pipeline: {}",
+                        desc.name
+                    )
+                    .as_str(),
+                )
         };
 
         // The subpass
@@ -165,17 +185,22 @@ impl<B: Backend> Plumber<B> {
             depth_stencil,
             multisampling: None,
             baked_states,
-            layout: self.empty_layout.deref(),
+            layout: &layout,
             subpass,
             flags: PipelineCreationFlags::empty(),
             parent: BasePipeline::None,
         };
 
-        let pipeline = unsafe {
+        let mut pipeline = unsafe {
             self.device
                 .create_graphics_pipeline(&hal_desc, None)
                 .expect("[Plumber] (create_pipeline) failed to create graphics pipeline")
         };
+
+        unsafe {
+            self.device
+                .set_graphics_pipeline_name(&mut pipeline, desc.name.deref())
+        }
 
         // Now we can drop the shader modules
         unsafe {
@@ -183,7 +208,7 @@ impl<B: Backend> Plumber<B> {
             self.device.destroy_shader_module(fragment_shader);
         }
 
-        pipeline
+        (pipeline, layout)
     }
 
     fn compile_glsl(

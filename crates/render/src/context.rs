@@ -1,6 +1,9 @@
-use crate::resource::buffer::BufferDescriptor;
-use crate::resource::frame::Extent3D;
-use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
+use crate::resource::{buffer::BufferDescriptor, glue::MixturePart};
+use crate::resource::{frame::Extent3D, glue::DescriptorWrite};
+use crate::resource::{
+    glue::Mixture,
+    pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
+};
 use crate::util::format::TextureFormat;
 use bytemuck::Pod;
 use gfx_backend_vulkan as graphics_backend;
@@ -16,10 +19,11 @@ pub trait GpuContext: Send + Sync {
     type ImageView: Debug + Send + Sync;
     type Framebuffer: Debug + Send + Sync;
     type CommandBuffer: Debug + Send + Sync;
+    type DescriptorLayout: Debug + Send + Sync;
+    type DescriptorSet: Debug + Send + Sync;
     /// eg. The Command buffer in recording state
     type CommandEncoder: CommandEncoder<Self> + Debug + Send + Sync;
     type SwapchainImage: Borrow<Self::ImageView> + Debug + Send + Sync;
-
     // Oke we will need to create abstractions for all of these first
     // fn create_initialized_buffer(
     //     &self,
@@ -44,9 +48,11 @@ pub trait GpuContext: Send + Sync {
     // Pipelines
     fn create_graphics_pipeline(
         &self,
-        desc: &GraphicsPipelineDescriptor,
+        desc: GraphicsPipelineDescriptor<Self>,
         render_context: RenderContext<Self>,
-    ) -> Self::PipelineHandle;
+    ) -> Self::PipelineHandle
+    where
+        Self: Sized;
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle);
 
     // NOTE(luca): Maybe this should not be provided by context, or like more sleek, but for now
@@ -70,6 +76,22 @@ pub trait GpuContext: Send + Sync {
         I::Item: Borrow<Self::ImageView>;
 
     fn drop_framebuffer(&self, fb: Self::Framebuffer);
+
+    // Descriptors from here on
+    fn create_descriptor_layout<I>(&self, parts: I) -> Self::DescriptorLayout
+    where
+        I: IntoIterator<Item = MixturePart>;
+
+    fn drop_descriptor_layout(&self, handle: Self::DescriptorLayout);
+
+    fn create_descriptor_set(&self, layout: &Mixture<Self>) -> Self::DescriptorSet;
+    fn drop_descriptor_set(&self, handle: Self::DescriptorSet);
+
+    fn update_descriptor_set(
+        &self,
+        handle: &Self::DescriptorSet,
+        writes: Vec<DescriptorWrite<Self>>,
+    );
 
     // Rendering API
     //

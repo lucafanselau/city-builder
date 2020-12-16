@@ -1,12 +1,14 @@
 use crate::context::{CurrentContext, GpuContext};
 use crate::resource::render_pass::SubpassId;
 use crate::util::format::TextureFormat;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, Range};
 use std::path::Path;
 use std::sync::Arc;
+
+use super::glue::Mixture;
 
 #[derive(Debug)]
 pub enum ShaderSource {
@@ -185,9 +187,20 @@ pub enum PipelineStage {
     MeshShader,
 }
 
+// #[derive(Debug)]
+// pub struct PipelineLayout<I>
+// where
+//     I: IntoIterator,
+//     I::Item: Borrow<Mixture>,
+// {
+//     pub(crate) sets: I,
+// }
+
 #[derive(Debug)]
-pub struct GraphicsPipelineDescriptor {
+pub struct GraphicsPipelineDescriptor<'a, Context: GpuContext> {
     pub name: Cow<'static, str>,
+
+    pub mixtures: Vec<&'a Mixture<Context>>,
 
     pub shaders: PipelineShaders,
     /// TODO: Render Pass layout for this Pipeline
@@ -258,5 +271,193 @@ impl Drop for GraphicsPipeline {
         unsafe {
             self.ctx.drop_pipeline(ManuallyDrop::take(&mut self.handle));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::command_encoder::*;
+    use crate::context::GpuContext;
+    use crate::replay::*;
+    use crate::resource::{buffer::*, frame::*, pipeline::*, render_pass::*};
+    use crate::util::format::*;
+    use bytemuck::{Pod, Zeroable};
+    use log::*;
+    use std::ops::Deref;
+
+    #[derive(Copy, Clone, Zeroable, Pod)]
+    #[repr(C)]
+    struct Vertex {
+        pos: [f32; 4],
+    }
+
+    const VERTEX_CODE: &str = r#"
+    #version 450
+    layout (location = 0) in vec4 in_pos;
+    void main() { gl_Position = in_pos; }
+    "#;
+
+    const FRAGMENT_CODE: &str = r#"
+    #version 450
+    #extension GL_ARB_separate_shader_objects : enable
+    layout(location = 0) out vec4 outColor;
+    void main() { outColor = vec4(1.0, 0.0, 0.0, 1.0); }
+    "#;
+
+    #[test]
+    fn simple_pipeline() {
+        let (ctx, resources, window, event_loop) = create_context();
+        let extent = (1600, 900);
+
+        let vertices = [
+            Vertex {
+                pos: [-0.5, -0.5, 0.0, 1.0],
+            },
+            Vertex {
+                pos: [0.0, 0.5, 0.0, 1.0],
+            },
+            Vertex {
+                pos: [0.5, -0.5, 0.0, 1.0],
+            },
+        ];
+        let vertex_size = std::mem::size_of::<Vertex>();
+
+        let vertex_buffer = resources.create_empty_buffer(BufferDescriptor {
+            name: "Simple Vertex Buffer".into(),
+            size: (vertex_size * vertices.len()) as u64,
+            memory_type: MemoryType::HostVisible,
+            usage: BufferUsage::Vertex,
+        });
+
+        unsafe {
+            ctx.write_to_buffer(vertex_buffer.deref(), &vertices);
+        }
+
+        let (pipeline, render_pass) = {
+            let vertex_code = ctx.compile_shader(ShaderSource::GlslSource((
+                VERTEX_CODE,
+                ShaderType::Vertex,
+                Some("test_vertex_shader"),
+            )));
+            let fragment_code = ctx.compile_shader(ShaderSource::GlslSource((
+                FRAGMENT_CODE,
+                ShaderType::Fragment,
+                Some("test_fragment_shader"),
+            )));
+
+            let render_pass = {
+                let color_attachment = Attachment {
+                    format: ctx.get_surface_format(),
+                    load_op: AttachmentLoadOp::Clear,
+                    store_op: AttachmentStoreOp::Store,
+                    layouts: TextureLayout::Undefined..TextureLayout::Present,
+                };
+
+                let subpass = SubpassDescriptor {
+                    colors: vec![(0, TextureLayout::ColorAttachmentOptimal)],
+                    depth_stencil: None,
+                    inputs: vec![],
+                    resolves: vec![],
+                    preserves: vec![],
+                };
+
+                let desc = RenderPassDescriptor {
+                    attachments: vec![color_attachment],
+                    subpasses: vec![subpass],
+                    pass_dependencies: vec![],
+                };
+
+                ctx.create_render_pass(&desc)
+            };
+
+            let desc = GraphicsPipelineDescriptor {
+                name: "simple_pipeline".into(),
+                shaders: PipelineShaders {
+                    vertex: vertex_code,
+                    fragment: fragment_code,
+                    geometry: None,
+                },
+                rasterizer: Rasterizer {
+                    polygon_mode: PolygonMode::Fill,
+                    culling: Culling {
+                        winding: Winding::Clockwise,
+                        cull_face: CullFace::None,
+                    },
+                },
+                vertex_buffers: vec![VertexBufferDescriptor {
+                    binding: 0,
+                    stride: vertex_size as u32,
+                    rate: VertexInputRate::Vertex,
+                }],
+                attributes: vec![AttributeDescriptor {
+                    location: 0,
+                    binding: 0,
+                    offset: 0,
+                    format: VertexAttributeFormat::Vec4,
+                }],
+                primitive: Primitive::TriangleList,
+                blend_targets: vec![true],
+                depth: None,
+                pipeline_states: PipelineStates {
+                    viewport: PipelineState::Dynamic,
+                    scissor: PipelineState::Dynamic,
+                },
+            };
+
+            let pipeline = resources
+                .create_graphics_pipeline(&desc, RenderContext::RenderPass((&render_pass, 0)));
+
+            (pipeline, render_pass)
+        };
+
+        run_loop(window, event_loop, move || {
+            let swapchain_image = ctx.new_frame();
+
+            use std::borrow::Borrow;
+
+            let framebuffer = ctx.create_framebuffer(
+                &render_pass,
+                vec![swapchain_image.borrow()],
+                Extent3D {
+                    width: extent.0,
+                    height: extent.1,
+                    depth: 1,
+                },
+            );
+
+            let viewport = Viewport {
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    width: extent.0 as i16,
+                    height: extent.1 as i16,
+                },
+                depth: 0.0..1.0,
+            };
+
+            let frame_commands = ctx.render_command(|cmd| {
+                cmd.begin_render_pass(
+                    &render_pass,
+                    &framebuffer,
+                    viewport.clone().rect,
+                    vec![Clear::Color(0.34, 0.12, 0.12, 1.0)],
+                );
+
+                cmd.bind_graphics_pipeline(&pipeline);
+
+                cmd.set_viewport(0, viewport.clone());
+                cmd.set_scissor(0, viewport.rect);
+
+                cmd.bind_vertex_buffer(0, vertex_buffer.deref(), BufferRange::WHOLE);
+
+                cmd.draw(0..3, 0..1);
+
+                cmd.end_render_pass();
+            });
+
+            ctx.end_frame(swapchain_image, frame_commands);
+
+            ctx.drop_framebuffer(framebuffer);
+        })
     }
 }

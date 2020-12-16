@@ -1,6 +1,12 @@
-use crate::context::{CurrentContext, GpuContext};
-use crate::resource::buffer::{Buffer, BufferDescriptor};
 use crate::resource::pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext};
+use crate::resource::{
+    buffer::{Buffer, BufferDescriptor},
+    glue::GlueBottle,
+};
+use crate::{
+    context::{CurrentContext, GpuContext},
+    resource::glue::{Mixture, MixturePart},
+};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -20,10 +26,21 @@ impl GpuResources {
 
     pub fn create_graphics_pipeline(
         &self,
-        desc: &GraphicsPipelineDescriptor,
+        desc: GraphicsPipelineDescriptor<CurrentContext>,
         render_context: RenderContext<CurrentContext>,
     ) -> GraphicsPipeline {
+        let name = desc.name.clone();
         let handle = self.ctx.create_graphics_pipeline(desc, render_context);
-        GraphicsPipeline::new(desc.name.clone(), handle, self.ctx.clone())
+        GraphicsPipeline::new(name, handle, self.ctx.clone())
+    }
+
+    pub fn stir(&self, parts: Vec<MixturePart>) -> Mixture<CurrentContext> {
+        let handle = self.ctx.create_descriptor_layout(parts.clone());
+        Mixture::new(parts, self.ctx.clone(), handle)
+    }
+
+    pub fn bottle(&self, mixture: &Mixture<CurrentContext>) -> GlueBottle<CurrentContext> {
+        let set = self.ctx.create_descriptor_set(mixture);
+        GlueBottle::<CurrentContext>::new(self.ctx.clone(), set, mixture.parts.clone())
     }
 }

@@ -1,16 +1,21 @@
-use crate::resource::frame::{Clear, Extent3D};
-use crate::resource::pipeline::{
-    AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
-    Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate,
-    Viewport, Winding,
-};
 use crate::resource::render_pass::{
     Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
     SubpassDescriptor,
 };
+use crate::resource::{buffer::BufferRange, glue::MixturePart, pipeline::ShaderType};
+use crate::resource::{
+    frame::{Clear, Extent3D},
+    glue::DescriptorWrite,
+};
 use crate::util::format::{ImageAccess, TextureFormat, TextureLayout};
-use gfx_hal::command::{ClearColor, ClearDepthStencil, ClearValue};
-use gfx_hal::format::Format;
+use crate::{
+    gfx::gfx_context::GfxContext,
+    resource::pipeline::{
+        AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage,
+        PolygonMode, Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor,
+        VertexInputRate, Viewport, Winding,
+    },
+};
 use gfx_hal::image::{Access, Extent, Layout};
 use gfx_hal::memory::Dependencies;
 use gfx_hal::pass::{
@@ -24,6 +29,16 @@ use gfx_hal::pso::{
     Rect as HalRect, State, VertexBufferDesc, VertexInputRate as HalInputRate,
     Viewport as HalViewport,
 };
+use gfx_hal::{
+    buffer::SubRange,
+    pso::{DescriptorSetLayoutBinding, ShaderStageFlags},
+    Backend,
+};
+use gfx_hal::{
+    command::{ClearColor, ClearDepthStencil, ClearValue},
+    pso::DescriptorType,
+};
+use gfx_hal::{format::Format, pso::DescriptorSetWrite};
 
 pub trait ToHalType {
     type Target;
@@ -398,6 +413,58 @@ impl ToHalType for Clear {
                     stencil: s,
                 },
             },
+        }
+    }
+}
+
+impl ToHalType for BufferRange {
+    type Target = SubRange;
+
+    fn convert(self) -> Self::Target {
+        SubRange {
+            offset: self.offset,
+            size: self.size,
+        }
+    }
+}
+
+impl ToHalType for ShaderType {
+    type Target = ShaderStageFlags;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            ShaderType::Vertex => ShaderStageFlags::VERTEX,
+            ShaderType::Fragment => ShaderStageFlags::FRAGMENT,
+            ShaderType::Compute => ShaderStageFlags::COMPUTE,
+            ShaderType::Geometry => ShaderStageFlags::GEOMETRY,
+        }
+    }
+}
+
+pub(in crate::gfx) fn get_descriptor_type(part: &MixturePart) -> DescriptorType {
+    match part.type_info {
+        crate::resource::glue::PartType::Uniform(_) => DescriptorType::Buffer {
+            ty: gfx_hal::pso::BufferDescriptorType::Uniform,
+            format: gfx_hal::pso::BufferDescriptorFormat::Structured {
+                dynamic_offset: part.is_dynamic,
+            },
+        },
+        crate::resource::glue::PartType::Sampler => DescriptorType::Image {
+            ty: gfx_hal::pso::ImageDescriptorType::Sampled { with_sampler: true },
+        },
+    }
+}
+
+impl ToHalType for MixturePart {
+    type Target = DescriptorSetLayoutBinding;
+
+    fn convert(self) -> Self::Target {
+        DescriptorSetLayoutBinding {
+            binding: self.binding,
+            ty: get_descriptor_type(&self),
+            count: self.array_size,
+            stage_flags: self.shader_type.convert(),
+            immutable_samplers: false,
         }
     }
 }

@@ -1,8 +1,32 @@
 use crate::context::{CurrentContext, GpuContext};
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
-use std::ops::Deref;
+use std::ops::{Deref, Range};
 use std::sync::Arc;
+
+/// Used for binding the buffer in a command encoder
+#[derive(Debug, Clone)]
+pub struct BufferRange {
+    pub offset: u64,
+    /// When None the whole buffer is used
+    pub size: Option<u64>,
+}
+
+impl BufferRange {
+    pub const WHOLE: Self = Self {
+        offset: 0,
+        size: None,
+    };
+}
+
+impl From<Range<u64>> for BufferRange {
+    fn from(r: Range<u64>) -> Self {
+        Self {
+            offset: r.start,
+            size: Some(r.end - r.start),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MemoryType {
