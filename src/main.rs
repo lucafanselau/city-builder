@@ -53,12 +53,17 @@ fn main() {
         s
     };
 
-    let window_size = winit::dpi::LogicalSize::new(1600, 900);
+    let window_size = winit::dpi::LogicalSize::new(960, 720);
 
     let (_event_loop, window) =
         window::create_window("Mightycity", window_size).expect("failed to create a window");
 
-    render::test_renderer::test_renderer::<winit::window::Window>(window.borrow(), (1600, 900));
+    let physical_size = window.inner_size();
+
+    render::test_renderer::test_renderer::<winit::window::Window>(
+        window.borrow(),
+        (physical_size.width, physical_size.height),
+    );
 }
 
 fn old_main() {

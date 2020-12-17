@@ -1,4 +1,4 @@
-use crate::resource::buffer::BufferRange;
+use crate::resource::buffer::{BufferCopy, BufferRange};
 use crate::resource::frame::Clear;
 use crate::resource::pipeline::{Rect, Viewport};
 use crate::{context::GpuContext, resource::glue::Glue};
@@ -24,4 +24,8 @@ pub trait CommandEncoder<C: GpuContext + ?Sized> {
     fn snort_glue(&mut self, set_idx: usize, pipeline: &C::PipelineHandle, glue: &Glue<C>);
 
     fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>);
+
+    fn copy_buffer<I>(&mut self, src: &C::BufferHandle, dst: &C::BufferHandle, regions: I)
+    where
+        I: IntoIterator<Item = BufferCopy>;
 }

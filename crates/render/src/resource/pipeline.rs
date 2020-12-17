@@ -235,17 +235,19 @@ pub enum RenderContext<'a, Context: GpuContext + ?Sized> {
     Attachments(&'a Vec<TextureFormat>),
 }
 
-type PipelineHandle = <CurrentContext as GpuContext>::PipelineHandle;
-
 #[derive(Debug)]
-pub struct GraphicsPipeline {
+pub struct GraphicsPipeline<Context: GpuContext> {
     name: Cow<'static, str>,
-    ctx: Arc<CurrentContext>,
-    handle: ManuallyDrop<PipelineHandle>,
+    ctx: Arc<Context>,
+    handle: ManuallyDrop<Context::PipelineHandle>,
 }
 
-impl GraphicsPipeline {
-    pub fn new(name: Cow<'static, str>, handle: PipelineHandle, ctx: Arc<CurrentContext>) -> Self {
+impl<Context: GpuContext> GraphicsPipeline<Context> {
+    pub fn new(
+        name: Cow<'static, str>,
+        handle: Context::PipelineHandle,
+        ctx: Arc<Context>,
+    ) -> Self {
         Self {
             name,
             ctx,
@@ -253,20 +255,20 @@ impl GraphicsPipeline {
         }
     }
 
-    pub fn get_handle(&self) -> &PipelineHandle {
+    pub fn get_handle(&self) -> &Context::PipelineHandle {
         self.handle.deref()
     }
 }
 
-impl Deref for GraphicsPipeline {
-    type Target = PipelineHandle;
+impl<Context: GpuContext> Deref for GraphicsPipeline<Context> {
+    type Target = Context::PipelineHandle;
 
     fn deref(&self) -> &Self::Target {
         self.handle.deref()
     }
 }
 
-impl Drop for GraphicsPipeline {
+impl<Context: GpuContext> Drop for GraphicsPipeline<Context> {
     fn drop(&mut self) {
         unsafe {
             self.ctx.drop_pipeline(ManuallyDrop::take(&mut self.handle));

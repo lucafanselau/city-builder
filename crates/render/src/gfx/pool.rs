@@ -142,7 +142,7 @@ impl<B: Backend> Pool<B> {
 
     pub fn free_set(&self, handle: SetHandle<B>) {
         let mut lanes = self.lanes.write();
-        let mut lane = lanes
+        let lane = lanes
             .get_mut(&handle.0)
             .expect("[Pool] failed to find matching lane to allocation");
 

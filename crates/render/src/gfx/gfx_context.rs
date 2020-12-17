@@ -24,7 +24,7 @@ use gfx_hal::{
 use gfx_hal::{device::Device, Backend};
 use log::{debug, info};
 use parking_lot::Mutex;
-use std::borrow::Borrow;
+use std::{borrow::Borrow, ops::DerefMut};
 use std::{mem::ManuallyDrop, sync::Arc};
 
 use super::pool::{LayoutHandle, Pool, SetHandle};
@@ -372,7 +372,12 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         self.pool.write_set(handle, writes)
     }
 
-    fn new_frame(&self) -> Self::SwapchainImage {
+    fn single_shot_command(&self, should_wait: bool, cb: impl FnOnce(&mut Self::CommandEncoder)) {
+        let mut queue = self.queues.graphics.lock();
+        self.swapper.one_shot(should_wait, cb, queue.deref_mut())
+    }
+
+    fn new_frame(&self) -> (u32, Self::SwapchainImage) {
         match self.swapper.new_frame() {
             Ok(i) => i,
             Err(_) => {
@@ -399,6 +404,10 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     fn wait_idle(&self) {
         self.device.wait_idle().expect("failed to wait idle");
     }
+
+    fn swapchain_image_count(&self) -> usize {
+        self.swapper.get_frames_in_flight()
+    }
 }
 
 impl<B: Backend> Drop for GfxContext<B> {
@@ -415,6 +424,7 @@ fn get_buffer_usage(desc: &BufferDescriptor) -> gfx_hal::buffer::Usage {
         BufferUsage::Uniform => Usage::UNIFORM,
         BufferUsage::Vertex => Usage::VERTEX,
         BufferUsage::Index => Usage::INDEX,
+        BufferUsage::Staging => Usage::TRANSFER_SRC,
     };
 
     if desc.memory_type == MemoryType::DeviceLocal {

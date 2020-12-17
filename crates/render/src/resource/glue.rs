@@ -79,9 +79,21 @@ pub struct DescriptorWrite<'a, Context: GpuContext + ?Sized> {
 }
 
 #[derive(Debug)]
+pub struct DescriptorSet<Context: GpuContext + ?Sized> {
+    pub(crate) ctx: Arc<Context>,
+    pub(crate) handle: ManuallyDrop<Context::DescriptorSet>,
+}
+
+impl<Context: GpuContext + ?Sized> Drop for DescriptorSet<Context> {
+    fn drop(&mut self) {
+        let set = unsafe { ManuallyDrop::take(&mut self.handle) };
+        self.ctx.drop_descriptor_set(set);
+    }
+}
+
+#[derive(Debug)]
 pub struct GlueBottle<'a, Context: GpuContext + ?Sized> {
-    ctx: Arc<Context>,
-    handle: Context::DescriptorSet,
+    pub(crate) handle: DescriptorSet<Context>,
     parts: Vec<MixturePart>,
 
     // Maps from binding to write
@@ -90,15 +102,13 @@ pub struct GlueBottle<'a, Context: GpuContext + ?Sized> {
 
 #[derive(Debug)]
 pub struct Glue<Context: GpuContext + ?Sized> {
-    ctx: Arc<Context>,
-    pub(crate) handle: ManuallyDrop<Context::DescriptorSet>,
-    parts: Vec<MixturePart>,
+    pub(crate) handle: DescriptorSet<Context>,
+    pub(crate) parts: Vec<MixturePart>,
 }
 
 impl<'a, Context: GpuContext> GlueBottle<'a, Context> {
-    pub fn new(ctx: Arc<Context>, handle: Context::DescriptorSet, parts: Vec<MixturePart>) -> Self {
+    pub fn new(handle: DescriptorSet<Context>, parts: Vec<MixturePart>) -> Self {
         Self {
-            ctx,
             handle,
             parts,
             writes: vec![],
@@ -172,19 +182,13 @@ impl<'a, Context: GpuContext> GlueBottle<'a, Context> {
     }
 
     pub fn apply(self) -> Glue<Context> {
-        self.ctx.update_descriptor_set(&self.handle, self.writes);
+        self.handle
+            .ctx
+            .update_descriptor_set(&self.handle.handle, self.writes);
 
         Glue {
-            ctx: self.ctx,
-            handle: ManuallyDrop::new(self.handle),
+            handle: self.handle,
             parts: self.parts,
         }
-    }
-}
-
-impl<Context: GpuContext + ?Sized> Drop for Glue<Context> {
-    fn drop(&mut self) {
-        let set = unsafe { ManuallyDrop::take(&mut self.handle) };
-        self.ctx.drop_descriptor_set(set);
     }
 }

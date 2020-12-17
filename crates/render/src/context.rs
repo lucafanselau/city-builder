@@ -93,13 +93,18 @@ pub trait GpuContext: Send + Sync {
         writes: Vec<DescriptorWrite<Self>>,
     );
 
+    // Single Shot Commands -> Transfer etc.
+    fn single_shot_command(&self, should_wait: bool, cb: impl FnOnce(&mut Self::CommandEncoder));
+
     // Rendering API
     //
     // This API is temporary and im not quite sure how to abstract that away
-    fn new_frame(&self) -> Self::SwapchainImage;
+    fn new_frame(&self) -> (u32, Self::SwapchainImage);
     fn end_frame(&self, swapchain_image: Self::SwapchainImage, frame_commands: Self::CommandBuffer);
 
     fn render_command(&self, cb: impl FnOnce(&mut Self::CommandEncoder)) -> Self::CommandBuffer;
+
+    fn swapchain_image_count(&self) -> usize;
 
     fn wait_idle(&self);
 }

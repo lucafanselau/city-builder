@@ -103,9 +103,24 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
             self.command.bind_graphics_descriptor_sets(
                 &pipeline.1,
                 set_idx,
-                vec![&glue.handle.1],
+                vec![&glue.handle.handle.1],
                 Vec::<&u32>::new(),
             )
+        }
+    }
+
+    fn copy_buffer<I>(
+        &mut self,
+        src: &<GfxContext<B> as GpuContext>::BufferHandle,
+        dst: &<GfxContext<B> as GpuContext>::BufferHandle,
+        regions: I,
+    ) where
+        I: IntoIterator<Item = crate::resource::buffer::BufferCopy>,
+    {
+        let regions: Vec<gfx_hal::command::BufferCopy> =
+            regions.into_iter().map(|r| r.convert()).collect();
+        unsafe {
+            self.command.copy_buffer(&src.0, &dst.0, regions);
         }
     }
 }

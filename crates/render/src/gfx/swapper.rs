@@ -1,8 +1,6 @@
 use crate::gfx::compat::ToHalType;
 use crate::gfx::gfx_command::GfxCommand;
-use crate::resource::pipeline::Rect;
 use crate::util::format::TextureFormat;
-use gfx_hal::adapter::Adapter;
 use gfx_hal::command::{CommandBuffer, CommandBufferFlags, Level};
 use gfx_hal::device::{Device, WaitFor};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
@@ -10,8 +8,9 @@ use gfx_hal::prelude::CommandQueue;
 use gfx_hal::queue::{QueueFamilyId, Submission};
 use gfx_hal::window::{Extent2D, PresentationSurface, SurfaceCapabilities};
 use gfx_hal::Backend;
+use gfx_hal::{adapter::Adapter, pso};
 use parking_lot::{Mutex, MutexGuard, RwLock};
-use std::borrow::Borrow;
+use pso::PipelineStage;
 use std::convert::TryInto;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
@@ -67,8 +66,9 @@ pub struct Swapper<B: Backend> {
     command_pool: Mutex<B::CommandPool>,
 }
 
-type SwapchainImage<B: Backend> =
-    <<B as Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
+const TIMEOUT: u64 = 1_000_000_000u64;
+
+type SwapchainImage<B> = <<B as Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
 
 impl<B: Backend> Swapper<B> {
     pub fn new(
@@ -161,7 +161,7 @@ impl<B: Backend> Swapper<B> {
         self.surface_format.clone()
     }
 
-    pub fn new_frame(&self) -> anyhow::Result<SwapchainImage<B>> {
+    pub fn new_frame(&self) -> anyhow::Result<(u32, SwapchainImage<B>)> {
         let frame_idx = {
             let mut current_frame = self.current_frame.write();
             match current_frame.1 {
@@ -202,7 +202,7 @@ impl<B: Backend> Swapper<B> {
             let mut surface = self.surface.write();
 
             match surface.deref_mut().acquire_image(acquire_timeout_ns) {
-                Ok((image, _)) => Ok(image),
+                Ok((image, _)) => Ok((frame_idx, image)),
                 Err(e) => {
                     self.should_configure_swapchain
                         .store(true, Ordering::Relaxed);
@@ -281,6 +281,48 @@ impl<B: Backend> Swapper<B> {
                 self.should_configure_swapchain
                     .store(true, Ordering::Relaxed);
             }
+        }
+    }
+
+    pub fn get_frames_in_flight(&self) -> usize {
+        self.frames_in_flight as usize
+    }
+
+    pub fn one_shot(
+        &self,
+        should_wait: bool,
+        cb: impl FnOnce(&mut GfxCommand<B>),
+        queue: &mut B::CommandQueue,
+    ) {
+        let command = self.render_command(cb);
+
+        let fence = if should_wait {
+            Some(
+                self.device
+                    .create_fence(false)
+                    .expect("[Swapper] (one_shot) failed to create fence"),
+            )
+        } else {
+            None
+        };
+
+        unsafe {
+            queue.submit(
+                Submission {
+                    command_buffers: vec![&command],
+                    wait_semaphores: Vec::<(&B::Semaphore, PipelineStage)>::new(),
+                    signal_semaphores: Vec::<&B::Semaphore>::new(),
+                },
+                fence.as_ref(),
+            );
+        }
+
+        if let Some(fence) = fence {
+            unsafe {
+                self.device
+                    .wait_for_fence(&fence, TIMEOUT)
+                    .expect("[Swapper] (one_shot) failed to wait fence")
+            };
         }
     }
 }

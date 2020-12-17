@@ -1,6 +1,9 @@
-use crate::resource::render_pass::{
-    Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
-    SubpassDescriptor,
+use crate::resource::{
+    buffer::BufferCopy,
+    render_pass::{
+        Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
+        SubpassDescriptor,
+    },
 };
 use crate::resource::{buffer::BufferRange, glue::MixturePart, pipeline::ShaderType};
 use crate::resource::{
@@ -35,7 +38,7 @@ use gfx_hal::{
     Backend,
 };
 use gfx_hal::{
-    command::{ClearColor, ClearDepthStencil, ClearValue},
+    command::{BufferCopy as HalBufferCopy, ClearColor, ClearDepthStencil, ClearValue},
     pso::DescriptorType,
 };
 use gfx_hal::{format::Format, pso::DescriptorSetWrite};
@@ -465,6 +468,18 @@ impl ToHalType for MixturePart {
             count: self.array_size,
             stage_flags: self.shader_type.convert(),
             immutable_samplers: false,
+        }
+    }
+}
+
+impl ToHalType for BufferCopy {
+    type Target = HalBufferCopy;
+
+    fn convert(self) -> Self::Target {
+        HalBufferCopy {
+            src: self.src_offset,
+            dst: self.dst_offset,
+            size: self.size,
         }
     }
 }

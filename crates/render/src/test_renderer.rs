@@ -1,4 +1,3 @@
-use crate::resource::buffer::{BufferDescriptor, BufferRange, BufferUsage, MemoryType};
 use crate::resource::frame::{Clear, Extent3D};
 use crate::resource::pipeline::{
     AttributeDescriptor, CullFace, Culling, GraphicsPipelineDescriptor, PipelineShaders,
@@ -8,6 +7,10 @@ use crate::resource::pipeline::{
 };
 use crate::resource::render_pass::{
     Attachment, AttachmentLoadOp, AttachmentStoreOp, RenderPassDescriptor, SubpassDescriptor,
+};
+use crate::resource::{
+    buffer::{BufferDescriptor, BufferRange, BufferUsage, MemoryType},
+    swap_buffer::SwapBuffer,
 };
 use crate::resources::GpuResources;
 use crate::util::format::TextureLayout;
@@ -64,31 +67,20 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
     ];
     let vertex_size = std::mem::size_of::<Vertex>();
 
-    let vertex_buffer = resources.create_empty_buffer(BufferDescriptor {
-        name: "Simple Vertex Buffer".into(),
-        size: (vertex_size * vertices.len()) as u64,
-        memory_type: MemoryType::HostVisible,
-        usage: BufferUsage::Vertex,
-    });
+    let vertex_buffer = resources.create_vertex_buffer("Vertex".into(), &vertices);
 
-    unsafe {
-        ctx.write_to_buffer(&vertex_buffer, &vertices);
-    }
+    let frames_in_flight = ctx.swapchain_image_count();
 
-    let offset = Offset {
+    let initial_offset = Offset {
         offset: [-0.2, 0.12, -0.4, 0.0],
     };
 
-    let offset_buffer = resources.create_empty_buffer(BufferDescriptor {
-        name: "Offset Uniform Buffer".into(),
-        size: std::mem::size_of::<Offset>() as u64,
-        memory_type: MemoryType::HostVisible,
-        usage: BufferUsage::Uniform,
-    });
-
-    unsafe {
-        ctx.write_to_buffer(&offset_buffer, &offset);
-    }
+    let offset_buffer = SwapBuffer::new(
+        ctx.clone(),
+        "Offset Uniform".into(),
+        ctx.swapchain_image_count(),
+        initial_offset,
+    );
 
     // Which is the equivalent of a DescriptorSetLayout
     let parts = crate::mixture![
@@ -98,10 +90,7 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
         // 2: "albedo" in Fragment: sampler
     ];
 
-    // info!("{:#?}", mixture);
-
     let mixture = resources.stir(parts);
-    // let glue = ctx.snort_glue(&mixture);
 
     let (pipeline, render_pass) = {
         let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
@@ -177,15 +166,17 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
         (pipeline, render_pass)
     };
 
-    let mut glue_bottle = resources.bottle(&mixture);
-    // glue_bottle.write_array(PartIndex::Name("lights".into()), &lights_buffer, None);
-    //glue_bottle.write_buffer(PartIndex::Binding(1), &camera_buffer, None);
-    glue_bottle.write_buffer(PartIndex::Name("offset".into()), &offset_buffer, None);
-    // TODO: Images at all, so probably not implemented in the near future
-    // glue.write_sampler(glue::Index::Name("albedo"), &image_view, &sampler);
+    let mut glue_drops = Vec::with_capacity(frames_in_flight);
 
-    // Actually executing the writes
-    let glue = glue_bottle.apply();
+    for i in 0..frames_in_flight {
+        let mut glue_bottle = resources.bottle(&mixture);
+        glue_bottle.write_buffer(
+            PartIndex::Name("offset".into()),
+            offset_buffer.get(i as u32),
+            None,
+        );
+        glue_drops.push(glue_bottle.apply());
+    }
 
     let mut running = true;
     let startup = Instant::now();
@@ -194,9 +185,16 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
     let mut frames = 0u32;
     warn!("starting..");
     while running {
-        if startup.elapsed().as_millis() > 6000 {
+        let elapsed = startup.elapsed().as_secs_f32();
+        if elapsed > 6.0 {
             running = false;
         }
+
+        let offset = Offset {
+            offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
+        };
+
+        offset_buffer.write(offset);
 
         let now = Instant::now();
 
@@ -213,7 +211,9 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
             }
         }
 
-        let swapchain_image = ctx.new_frame();
+        let (index, swapchain_image) = ctx.new_frame();
+
+        offset_buffer.frame(index);
 
         let framebuffer = ctx.create_framebuffer(
             &render_pass,
@@ -250,7 +250,7 @@ pub fn test_renderer<W: HasRawWindowHandle>(w: &W, extent: (u32, u32)) {
 
             cmd.bind_vertex_buffer(0, vertex_buffer.deref(), BufferRange::WHOLE);
 
-            cmd.snort_glue(0, &pipeline, &glue);
+            cmd.snort_glue(0, &pipeline, &glue_drops[index as usize]);
 
             cmd.draw(0..3, 0..1);
 

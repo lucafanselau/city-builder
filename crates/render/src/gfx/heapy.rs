@@ -151,6 +151,7 @@ impl<B: Backend> Heapy<B> {
         });
     }
 
+    #[allow(dead_code)]
     pub(crate) fn bind_image(&self, at: &AllocationIndex, image: &mut B::Image) {
         self.get_bind_data(at, |memory, offset| unsafe {
             self.device

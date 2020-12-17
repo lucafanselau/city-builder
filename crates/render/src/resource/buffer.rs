@@ -1,4 +1,4 @@
-use crate::context::{CurrentContext, GpuContext};
+use crate::context::GpuContext;
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, Range};
@@ -10,6 +10,13 @@ pub struct BufferRange {
     pub offset: u64,
     /// When None the whole buffer is used
     pub size: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BufferCopy {
+    pub src_offset: u64,
+    pub dst_offset: u64,
+    pub size: u64,
 }
 
 impl BufferRange {
@@ -39,6 +46,7 @@ pub enum BufferUsage {
     Uniform,
     Vertex,
     Index,
+    Staging,
 }
 
 #[derive(Clone, Debug)]
@@ -49,17 +57,15 @@ pub struct BufferDescriptor {
     pub usage: BufferUsage,
 }
 
-type BufferHandle = <CurrentContext as GpuContext>::BufferHandle;
-
 #[derive(Debug)]
-pub struct Buffer {
+pub struct Buffer<Context: GpuContext> {
     name: Cow<'static, str>,
-    ctx: Arc<CurrentContext>,
-    handle: ManuallyDrop<BufferHandle>,
+    ctx: Arc<Context>,
+    handle: ManuallyDrop<Context::BufferHandle>,
 }
 
-impl Buffer {
-    pub fn new(name: Cow<'static, str>, handle: BufferHandle, ctx: Arc<CurrentContext>) -> Self {
+impl<Context: GpuContext> Buffer<Context> {
+    pub fn new(name: Cow<'static, str>, handle: Context::BufferHandle, ctx: Arc<Context>) -> Self {
         Self {
             name,
             ctx,
@@ -67,20 +73,20 @@ impl Buffer {
         }
     }
 
-    pub fn get_handle(&self) -> &BufferHandle {
+    pub fn get_handle(&self) -> &Context::BufferHandle {
         self.handle.deref()
     }
 }
 
-impl Deref for Buffer {
-    type Target = BufferHandle;
+impl<Context: GpuContext> Deref for Buffer<Context> {
+    type Target = Context::BufferHandle;
 
     fn deref(&self) -> &Self::Target {
         self.handle.deref()
     }
 }
 
-impl Drop for Buffer {
+impl<Context: GpuContext> Drop for Buffer<Context> {
     fn drop(&mut self) {
         unsafe {
             self.ctx.drop_buffer(ManuallyDrop::take(&mut self.handle));
