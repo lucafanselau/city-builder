@@ -1,43 +1,43 @@
 #[macro_export]
 macro_rules! parse_line {
     ($binding:literal: $name:literal in $type:tt: [$buffer_type:ty; $array_count:literal]) => {
-        crate::resource::glue::MixturePart {
+        MixturePart {
             binding: $binding,
             name: String::from($name),
-            shader_type: crate::resource::pipeline::ShaderType::$type,
+            shader_type: ShaderType::$type,
             is_dynamic: false,
             array_size: $array_count,
-            type_info: crate::resource::glue::PartType::Uniform(std::mem::size_of::<$buffer_type>()),
+            type_info: PartType::Uniform(std::mem::size_of::<$buffer_type>()),
         }
     };
     ($binding:literal: $name:literal in $type:tt: [dynamic $buffer_type:ty]) => {
-        crate::resource::glue::MixturePart {
+        MixturePart {
             binding: $binding,
             name: String::from($name),
-            shader_type: crate::resource::pipeline::ShaderType::$type,
+            shader_type: ShaderType::$type,
             is_dynamic: true,
             array_size: 1,
-            type_info: crate::resource::glue::PartType::Uniform(std::mem::size_of::<$buffer_type>()),
+            type_info: PartType::Uniform(std::mem::size_of::<$buffer_type>()),
         }
     };
     ($binding:literal: $name:literal in $type:tt: sampler) => {
-        crate::resource::glue::MixturePart {
+        MixturePart {
             binding: $binding,
             name: String::from($name),
-            shader_type: crate::resource::pipeline::ShaderType::$type,
+            shader_type: ShaderType::$type,
             is_dynamic: false,
             array_size: 1,
-            type_info: crate::resource::glue::PartType::Sampler,
+            type_info: PartType::Sampler,
         }
     };
     ($binding:literal: $name:literal in $type:tt: $buffer_type:ty) => {
-        crate::resource::glue::MixturePart {
+        MixturePart {
             binding: $binding,
             name: String::from($name),
-            shader_type: crate::resource::pipeline::ShaderType::$type,
+            shader_type: ShaderType::$type,
             is_dynamic: false,
             array_size: 1,
-            type_info: crate::resource::glue::PartType::Uniform(std::mem::size_of::<$buffer_type>()),
+            type_info: PartType::Uniform(std::mem::size_of::<$buffer_type>()),
         }
     };
 }
@@ -65,6 +65,6 @@ macro_rules! parse_line {
 #[macro_export]
 macro_rules! mixture {
     [$($binding:literal: $name:literal in $type:ident: $rest:tt),*] => {
-        vec![$(crate::parse_line!($binding: $name in $type: $rest),)*]
+        vec![$(parse_line!($binding: $name in $type: $rest),)*]
     };
 }

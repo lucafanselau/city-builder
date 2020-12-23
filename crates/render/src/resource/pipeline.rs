@@ -1,7 +1,7 @@
-use crate::context::{CurrentContext, GpuContext};
+use crate::context::GpuContext;
 use crate::resource::render_pass::SubpassId;
 use crate::util::format::TextureFormat;
-use std::borrow::{Borrow, Cow};
+use std::borrow::{Cow};
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, Range};
@@ -27,10 +27,10 @@ pub enum ShaderType {
 }
 
 #[derive(Debug)]
-pub struct PipelineShaders {
-    pub vertex: <CurrentContext as GpuContext>::ShaderCode,
-    pub fragment: <CurrentContext as GpuContext>::ShaderCode,
-    pub geometry: Option<<CurrentContext as GpuContext>::ShaderCode>, // etc...
+pub struct PipelineShaders<Context: GpuContext> {
+    pub vertex: <Context as GpuContext>::ShaderCode,
+    pub fragment: <Context as GpuContext>::ShaderCode,
+    pub geometry: Option<<Context as GpuContext>::ShaderCode>, // etc...
 }
 
 #[derive(Debug, Clone)]
@@ -202,7 +202,7 @@ pub struct GraphicsPipelineDescriptor<'a, Context: GpuContext> {
 
     pub mixtures: Vec<&'a Mixture<Context>>,
 
-    pub shaders: PipelineShaders,
+    pub shaders: PipelineShaders<Context>,
     /// TODO: Render Pass layout for this Pipeline
     pub rasterizer: Rasterizer,
     // This should an probably will be serialized?

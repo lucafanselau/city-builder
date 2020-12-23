@@ -1,8 +1,5 @@
-use crate::gfx::compat::ToHalType;
-use crate::gfx::gfx_context::GfxContext;
-use crate::resource::pipeline::{
-    GraphicsPipelineDescriptor, RenderContext, ShaderSource, ShaderType,
-};
+use crate::compat::ToHalType;
+use crate::gfx_context::GfxContext;
 use gfx_hal::pass::Subpass;
 use gfx_hal::pso::{
     AttributeDesc, BakedStates, BasePipeline, BlendDesc, BlendState, ColorBlendDesc, ColorMask,
@@ -11,6 +8,9 @@ use gfx_hal::pso::{
 };
 use gfx_hal::{device::Device, Backend};
 use parking_lot::Mutex;
+use render::resource::pipeline::{
+    GraphicsPipelineDescriptor, RenderContext, ShaderSource, ShaderType,
+};
 use shaderc::Compiler;
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter, Result};
@@ -18,7 +18,7 @@ use std::iter;
 use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::path::Path;
-use std::pin::Pin;
+
 use std::sync::Arc;
 
 // This is the system that provides Pipelines and everything related (like RenderPasses, Shader Compilation, etc. )

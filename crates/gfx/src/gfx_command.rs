@@ -1,16 +1,16 @@
-use crate::context::GpuContext;
-use crate::gfx::compat::ToHalType;
-use crate::gfx::gfx_context::GfxContext;
-use crate::resource::buffer::BufferRange;
-use crate::resource::frame::Clear;
-use crate::resource::pipeline::{Rect, Viewport};
-use crate::{command_encoder::CommandEncoder, resource::glue::Glue};
 use bytemuck::__core::ops::Range;
-use gfx_hal::adapter::Adapter;
+use render::context::GpuContext;
+use render::resource::buffer::BufferRange;
+use render::resource::frame::Clear;
+use render::resource::pipeline::{Rect, Viewport};
+use render::{command_encoder::CommandEncoder, resource::glue::Glue};
+
 use gfx_hal::command::{ClearValue, CommandBuffer, SubpassContents};
 use gfx_hal::Backend;
-use std::sync::Arc;
-use std::{borrow::Borrow, iter};
+
+use std::iter;
+
+use crate::{compat::ToHalType, gfx_context::GfxContext};
 
 #[derive(Debug)]
 pub struct GfxCommand<B: Backend> {
@@ -115,7 +115,7 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
         dst: &<GfxContext<B> as GpuContext>::BufferHandle,
         regions: I,
     ) where
-        I: IntoIterator<Item = crate::resource::buffer::BufferCopy>,
+        I: IntoIterator<Item = render::resource::buffer::BufferCopy>,
     {
         let regions: Vec<gfx_hal::command::BufferCopy> =
             regions.into_iter().map(|r| r.convert()).collect();

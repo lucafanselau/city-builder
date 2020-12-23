@@ -1,13 +1,14 @@
-use crate::resource::{buffer::BufferDescriptor, glue::MixturePart};
-use crate::resource::{frame::Extent3D, glue::DescriptorWrite};
+use crate::resource::{frame::Extent3D, glue::DescriptorWrite, render_pass::RenderPassDescriptor};
 use crate::resource::{
     glue::Mixture,
     pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
 };
 use crate::util::format::TextureFormat;
+use crate::{
+    command_encoder::CommandEncoder,
+    resource::{buffer::BufferDescriptor, glue::MixturePart},
+};
 use bytemuck::Pod;
-use gfx_backend_vulkan as graphics_backend;
-use raw_window_handle::HasRawWindowHandle;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
@@ -107,14 +108,4 @@ pub trait GpuContext: Send + Sync {
     fn swapchain_image_count(&self) -> usize;
 
     fn wait_idle(&self);
-}
-
-// here would be like #[cfg(feature = "gfx")] or something if we make this plug and play
-use crate::command_encoder::CommandEncoder;
-use crate::resource::render_pass::RenderPassDescriptor;
-
-pub type CurrentContext = crate::gfx::gfx_context::GfxContext<graphics_backend::Backend>;
-
-pub fn create_render_context<W: HasRawWindowHandle>(window: &W) -> CurrentContext {
-    CurrentContext::new(window)
 }

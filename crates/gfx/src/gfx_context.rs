@@ -1,17 +1,8 @@
-use crate::gfx::gfx_command::GfxCommand;
-use crate::gfx::heapy::{AllocationIndex, Heapy};
-use crate::gfx::plumber::Plumber;
-use crate::gfx::swapper::Swapper;
-use crate::resource::buffer::{BufferDescriptor, BufferUsage};
-use crate::resource::frame::Extent3D;
-use crate::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
-use crate::resource::render_pass::RenderPassDescriptor;
-use crate::util::format::TextureFormat;
-use crate::{context::GpuContext, resource::glue::DescriptorWrite};
-use crate::{
-    gfx::compat::{HalCompatibleSubpassDescriptor, ToHalType},
-    resource::glue::Mixture,
-};
+use crate::compat::{HalCompatibleSubpassDescriptor, ToHalType};
+use crate::gfx_command::GfxCommand;
+use crate::heapy::{AllocationIndex, Heapy};
+use crate::plumber::Plumber;
+use crate::swapper::Swapper;
 use bytemuck::Pod;
 use gfx_hal::format::Format;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
@@ -19,13 +10,21 @@ use gfx_hal::queue::QueueFamilyId;
 use gfx_hal::window::PresentationSurface;
 use gfx_hal::{
     adapter::{Adapter, DeviceType},
-    pool,
+    Instance,
 };
 use gfx_hal::{device::Device, Backend};
 use log::{debug, info};
 use parking_lot::Mutex;
+use raw_window_handle::HasRawWindowHandle;
+use render::resource::buffer::{BufferDescriptor, BufferUsage};
+use render::resource::frame::Extent3D;
+use render::resource::glue::Mixture;
+use render::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
+use render::resource::render_pass::RenderPassDescriptor;
+use render::util::format::TextureFormat;
+use render::{context::GpuContext, resource::glue::DescriptorWrite};
 use std::{borrow::Borrow, ops::DerefMut};
-use std::{mem::ManuallyDrop, sync::Arc};
+use std::{ops::Deref, sync::Arc};
 
 use super::pool::{LayoutHandle, Pool, SetHandle};
 
@@ -36,6 +35,9 @@ struct Queues<B: Backend> {
     compute: Mutex<B::CommandQueue>,
     compute_family: QueueFamilyId,
 }
+
+use gfx_backend_vulkan as graphics_backend;
+pub type Context = GfxContext<graphics_backend::Backend>;
 
 /// This is the GFX-hal implementation of the Rendering Context described in mod.rs
 #[derive(Debug)]
@@ -58,8 +60,8 @@ where
 }
 
 impl<B: Backend> GfxContext<B> {
-    pub fn new(window_handle: &impl raw_window_handle::HasRawWindowHandle) -> Self {
-        use gfx_hal::{adapter::Gpu, queue::QueueFamily, Instance};
+    pub fn new(window: &impl HasRawWindowHandle) -> Self {
+        use gfx_hal::{adapter::Gpu, queue::QueueFamily};
 
         let (instance, adapters, surface) = {
             let instance: B::Instance = B::Instance::create("City Builder Context", 1)
@@ -67,7 +69,7 @@ impl<B: Backend> GfxContext<B> {
 
             let surface = unsafe {
                 instance
-                    .create_surface(window_handle)
+                    .create_surface(window)
                     .expect("failed to create surface")
             };
 
@@ -170,7 +172,7 @@ impl<B: Backend> GfxContext<B> {
         };
 
         let surface_format = {
-            use crate::gfx::compat::FromHalType;
+            use crate::compat::FromHalType;
             use gfx_hal::format::ChannelType;
 
             let supported_formats = surface
@@ -240,7 +242,6 @@ impl<B: Backend> GpuContext for GfxContext<B> {
                             .alloc(requirements.size, desc.memory_type, Some(requirements));
                     self.heapy.bind_buffer(&allocation, &mut buffer);
 
-                    use std::ops::Deref;
                     self.device.set_buffer_name(&mut buffer, desc.name.deref());
 
                     (buffer, allocation)
@@ -348,7 +349,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
 
     fn create_descriptor_layout<I>(&self, parts: I) -> Self::DescriptorLayout
     where
-        I: IntoIterator<Item = crate::resource::glue::MixturePart>,
+        I: IntoIterator<Item = render::resource::glue::MixturePart>,
     {
         self.pool.create_layout(parts)
     }
@@ -418,8 +419,8 @@ impl<B: Backend> Drop for GfxContext<B> {
 
 // Helper functions, mainly maps between our enums and gfx_hal's ones
 fn get_buffer_usage(desc: &BufferDescriptor) -> gfx_hal::buffer::Usage {
-    use crate::resource::buffer::MemoryType;
     use gfx_hal::buffer::Usage;
+    use render::resource::buffer::MemoryType;
     let usage = match desc.usage {
         BufferUsage::Uniform => Usage::UNIFORM,
         BufferUsage::Vertex => Usage::VERTEX,

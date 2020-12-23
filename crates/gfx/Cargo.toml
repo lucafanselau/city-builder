@@ -1,6 +1,6 @@
 [package]
-name = "render"
-version = "0.2.0"
+name = "gfx"
+version = "0.1.0"
 authors = ["Luca Fanselau <luca.fanselau@outlook.com>"]
 edition = "2018"
 
@@ -8,8 +8,9 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.11"
-app = { path = "../app" }
+render = { path = "../render" }
 generational-arena = "0.2.8"
+raw-window-handle = "0.3.3"
 gfx-hal = "0.6.0"
 gfx-backend-vulkan = "0.6.5"
 parking_lot = "0.11.0"
@@ -19,3 +20,4 @@ bytemuck = { version =  "1.4.1", features = ["derive"] }
 
 # I really dont want to add shaderc, but because of a lack of better alternatives, here we go
 shaderc = "0.7.0"
+

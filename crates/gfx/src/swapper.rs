@@ -1,6 +1,5 @@
-use crate::gfx::compat::ToHalType;
-use crate::gfx::gfx_command::GfxCommand;
-use crate::util::format::TextureFormat;
+use crate::compat::ToHalType;
+use crate::gfx_command::GfxCommand;
 use gfx_hal::command::{CommandBuffer, CommandBufferFlags, Level};
 use gfx_hal::device::{Device, WaitFor};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
@@ -11,6 +10,7 @@ use gfx_hal::Backend;
 use gfx_hal::{adapter::Adapter, pso};
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use pso::PipelineStage;
+use render::util::format::TextureFormat;
 use std::convert::TryInto;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
@@ -63,7 +63,7 @@ pub struct Swapper<B: Backend> {
     // Command Managment -> This is not intended to be a command pool manager
     // We will need a more sophisticated solution in the future, but for now, to make
     // things work, here we go
-    command_pool: Mutex<B::CommandPool>,
+    command_pool: ManuallyDrop<Mutex<B::CommandPool>>,
 }
 
 const TIMEOUT: u64 = 1_000_000_000u64;
@@ -104,13 +104,13 @@ impl<B: Backend> Swapper<B> {
             current_frame: RwLock::new((0, FrameStatus::Inactive)),
             frames_in_flight,
             frames,
-            command_pool: Mutex::new(command_pool),
+            command_pool: ManuallyDrop::new(Mutex::new(command_pool)),
         }
     }
 
     fn configure_swapchain(&self) -> anyhow::Result<()> {
         if self.should_configure_swapchain.load(Ordering::Relaxed) {
-            use gfx_hal::window::{PresentationSurface, Surface, SwapchainConfig};
+            use gfx_hal::window::{Surface, SwapchainConfig};
 
             // First we need to wait for all frames to finish
             let wait_timeout_ns = 1_000_000_000;
@@ -335,6 +335,10 @@ impl<B: Backend> Drop for Swapper<B> {
                 self.device.destroy_semaphore(frame.rendering_complete);
                 self.device.destroy_fence(frame.submission_fence);
             }
+        }
+        unsafe {
+            let pool = ManuallyDrop::take(&mut self.command_pool).into_inner();
+            self.device.destroy_command_pool(pool);
         }
     }
 }

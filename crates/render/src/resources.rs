@@ -12,7 +12,7 @@ use crate::{
     },
 };
 use crate::{
-    context::{CurrentContext, GpuContext},
+    context::GpuContext,
     resource::glue::{Mixture, MixturePart},
 };
 use std::{borrow::Cow, mem::ManuallyDrop, sync::Arc};
@@ -32,9 +32,10 @@ impl<Context: GpuContext> GpuResources<Context> {
         Buffer::new(desc.name, handle, self.ctx.clone())
     }
 
-    pub fn create_vertex_buffer<T: Pod>(
+    pub fn create_device_local_buffer<T: Pod>(
         &self,
         name: Cow<'static, str>,
+        usage: BufferUsage,
         data: &T,
     ) -> Buffer<Context> {
         let size = std::mem::size_of::<T>() as u64;

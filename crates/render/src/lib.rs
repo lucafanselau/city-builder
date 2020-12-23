@@ -1,14 +1,24 @@
-#![feature(is_sorted)]
-
-pub(crate) mod gfx;
-
 pub mod command_encoder;
 pub mod context;
 pub mod resource;
 pub mod resources;
 pub mod util;
 
-pub mod test_renderer;
+pub mod prelude {
+    pub use crate::command_encoder::CommandEncoder;
+    pub use crate::context::GpuContext;
+    pub use crate::resource::{
+        buffer::{Buffer, BufferRange, BufferUsage, MemoryType},
+        frame::Extent3D,
+        glue::{Glue, GlueBottle, MixturePart, PartIndex, PartType},
+        pipeline::{GraphicsPipelineDescriptor, ShaderSource, ShaderType},
+        swap_buffer::SwapBuffer,
+    };
+    pub use crate::resources::GpuResources;
+    pub use crate::{mixture, parse_line};
+}
+
+// pub mod test_renderer;
 
 // #[cfg(test)]
 // pub mod replay;

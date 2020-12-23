@@ -1,0 +1,16 @@
+[package]
+name = "artisan"
+version = "0.1.0"
+authors = ["Luca Fanselau <luca.fanselau@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+app = { path = "../app" }
+gfx = { path = "../gfx" }
+render = { path = "../render" }
+window = { path = "../window" }
+
+raw-window-handle = "0.3.3"
+bytemuck = { version =  "1.4.1", features = ["derive"] }

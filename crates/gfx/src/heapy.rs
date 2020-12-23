@@ -1,5 +1,4 @@
-use crate::gfx::memory_page::MemoryPage;
-use crate::resource::buffer::MemoryType;
+use crate::memory_page::MemoryPage;
 use generational_arena::{Arena, Index};
 use gfx_hal::{
     adapter::PhysicalDevice,
@@ -8,6 +7,7 @@ use gfx_hal::{
     Backend, MemoryTypeId,
 };
 use parking_lot::RwLock;
+use render::resource::buffer::MemoryType;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU64;
 use std::{collections::HashMap, sync::Arc};

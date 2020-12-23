@@ -15,9 +15,9 @@ use gfx_hal::{
     },
     Backend,
 };
-use parking_lot::{RwLock, RwLockUpgradableReadGuard};
+use parking_lot::RwLock;
 
-use crate::resource::glue::{DescriptorWrite, Mixture};
+use render::resource::glue::{DescriptorWrite, Mixture};
 
 use super::{
     compat::{get_descriptor_type, ToHalType},
@@ -53,7 +53,7 @@ impl<B: Backend> Pool<B> {
 
     pub fn create_layout<I>(&self, parts: I) -> LayoutHandle<B>
     where
-        I: IntoIterator<Item = crate::resource::glue::MixturePart>,
+        I: IntoIterator<Item = render::resource::glue::MixturePart>,
     {
         let bindings: Vec<gfx_hal::pso::DescriptorSetLayoutBinding> =
             parts.into_iter().map(|p| p.convert()).collect();
@@ -158,7 +158,7 @@ impl<B: Backend> Pool<B> {
             .into_iter()
             .map(|w| {
                 let descriptor = match w.descriptor {
-                    crate::resource::glue::Descriptor::Buffer(buffer, range) => {
+                    render::resource::glue::Descriptor::Buffer(buffer, range) => {
                         Descriptor::Buffer(&buffer.0, range.convert())
                     }
                 };

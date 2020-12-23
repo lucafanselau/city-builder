@@ -7,32 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
-members = ["crates/ecs", "crates/render"]
+members = ["crates/ecs", "crates/render", "crates/app", "crates/gfx", "crates/window", "crates/artisan"]
 
 [dependencies]
-winit = "0.22.1"
 log = "0.4.11"
 simplelog = { path = "../simplelog.rs" }
-gfx-hal = "0.5"
-# First we will just stick to vulkan so
-gfx-backend-vulkan = "0.5"
-arrayvec = "0.5.1"
-shaderc = "0.7.0"
-notify = "4.0.15"
-serde = { version = "1.0.110", features = ["derive"] }
-bincode = "1.2.1"
-nalgebra-glm = "0.7.0"
-owning_ref =  "0.4.1"
-uuid = { version = "0.8", features = ["v4"] }
-anyhow = "1.0.32"
-thiserror = "1.0.20"
-bytemuck = { version =  "1.4.1", features = ["derive"] }
 
-ecs = { path = "crates/ecs" }
-render = { path = "crates/render" }
-
-# IMGUI
-imgui = "0.4.0"
-imgui-winit-support = "0.4.0"
-# pbly never going to use this:
-# imgui_gfx_hal = "0.1.2"
+app = { path = "crates/app" }
+artisan = { path = "crates/artisan" }
+window = { path = "crates/window" }

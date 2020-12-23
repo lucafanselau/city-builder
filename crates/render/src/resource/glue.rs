@@ -1,7 +1,7 @@
 use std::{mem::ManuallyDrop, ops::Range, sync::Arc};
 
 use super::pipeline::ShaderType;
-use crate::context::{CurrentContext, GpuContext};
+use crate::context::GpuContext;
 use crate::resource::buffer::BufferRange;
 
 #[derive(Debug, Clone)]
@@ -31,8 +31,8 @@ type RawDescriptorLayout<Context> = <Context as GpuContext>::DescriptorLayout;
 
 #[derive(Debug)]
 pub struct DescriptorLayout<Context: GpuContext + ?Sized> {
-    pub(crate) ctx: Arc<Context>,
-    pub(crate) handle: ManuallyDrop<RawDescriptorLayout<Context>>,
+    pub ctx: Arc<Context>,
+    pub handle: ManuallyDrop<RawDescriptorLayout<Context>>,
 }
 
 impl<Context: GpuContext + ?Sized> Drop for DescriptorLayout<Context> {
@@ -46,8 +46,8 @@ impl<Context: GpuContext + ?Sized> Drop for DescriptorLayout<Context> {
 
 #[derive(Debug)]
 pub struct Mixture<Context: GpuContext + ?Sized> {
-    pub(crate) parts: Vec<MixturePart>,
-    pub(crate) gpu_layout: DescriptorLayout<Context>,
+    pub parts: Vec<MixturePart>,
+    pub gpu_layout: DescriptorLayout<Context>,
 }
 
 impl<Context: GpuContext> Mixture<Context> {
@@ -73,15 +73,15 @@ pub enum Descriptor<'a, Context: GpuContext + ?Sized> {
 
 #[derive(Debug)]
 pub struct DescriptorWrite<'a, Context: GpuContext + ?Sized> {
-    pub(crate) binding: u32,
-    pub(crate) array_offset: usize,
-    pub(crate) descriptor: Descriptor<'a, Context>,
+    pub binding: u32,
+    pub array_offset: usize,
+    pub descriptor: Descriptor<'a, Context>,
 }
 
 #[derive(Debug)]
 pub struct DescriptorSet<Context: GpuContext + ?Sized> {
-    pub(crate) ctx: Arc<Context>,
-    pub(crate) handle: ManuallyDrop<Context::DescriptorSet>,
+    pub ctx: Arc<Context>,
+    pub handle: ManuallyDrop<Context::DescriptorSet>,
 }
 
 impl<Context: GpuContext + ?Sized> Drop for DescriptorSet<Context> {
@@ -93,7 +93,7 @@ impl<Context: GpuContext + ?Sized> Drop for DescriptorSet<Context> {
 
 #[derive(Debug)]
 pub struct GlueBottle<'a, Context: GpuContext + ?Sized> {
-    pub(crate) handle: DescriptorSet<Context>,
+    pub handle: DescriptorSet<Context>,
     parts: Vec<MixturePart>,
 
     // Maps from binding to write
@@ -102,8 +102,8 @@ pub struct GlueBottle<'a, Context: GpuContext + ?Sized> {
 
 #[derive(Debug)]
 pub struct Glue<Context: GpuContext + ?Sized> {
-    pub(crate) handle: DescriptorSet<Context>,
-    pub(crate) parts: Vec<MixturePart>,
+    pub handle: DescriptorSet<Context>,
+    pub parts: Vec<MixturePart>,
 }
 
 impl<'a, Context: GpuContext> GlueBottle<'a, Context> {
