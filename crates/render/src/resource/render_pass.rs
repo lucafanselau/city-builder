@@ -9,14 +9,14 @@ use std::ops::Range;
 pub type AttachmentLayout = TextureLayout;
 
 #[derive(Debug, Clone)]
-pub enum AttachmentLoadOp {
+pub enum LoadOp {
     Load,
     Clear,
     DontCare,
 }
 
 #[derive(Debug, Clone)]
-pub enum AttachmentStoreOp {
+pub enum StoreOp {
     Store,
     DontCare,
 }
@@ -25,8 +25,8 @@ pub enum AttachmentStoreOp {
 pub struct Attachment {
     pub format: TextureFormat,
     // TODO: Multisampling
-    pub load_op: AttachmentLoadOp,
-    pub store_op: AttachmentStoreOp,
+    pub load_op: LoadOp,
+    pub store_op: StoreOp,
     pub layouts: Range<AttachmentLayout>,
 }
 

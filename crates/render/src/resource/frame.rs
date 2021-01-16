@@ -1,4 +1,10 @@
 #[derive(Debug, Clone)]
+pub struct Extent2D {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone)]
 pub struct Extent3D {
     pub width: u32,
     pub height: u32,

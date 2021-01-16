@@ -1,4 +1,4 @@
-use crate::compat::{HalCompatibleSubpassDescriptor, ToHalType};
+use crate::{compat::{HalCompatibleSubpassDescriptor, ToHalType}, graph::GfxGraph};
 use crate::gfx_command::GfxCommand;
 use crate::heapy::{AllocationIndex, Heapy};
 use crate::plumber::Plumber;
@@ -231,6 +231,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     type CommandEncoder = GfxCommand<B>;
     type SwapchainImage =
         <<B as gfx_hal::Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
+    type ContextGraph = GfxGraph<B>;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -381,7 +382,9 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     fn new_frame(&self) -> (u32, Self::SwapchainImage) {
         match self.swapper.new_frame() {
             Ok(i) => i,
-            Err(_) => {
+            Err(e) => {
+                log::warn!("Ignorable error happened during new frame");
+                log::warn!("{:#?}", e);
                 // Try again, this will reconfigure the swapchain
                 self.swapper.new_frame().unwrap()
             }

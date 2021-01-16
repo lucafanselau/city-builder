@@ -29,8 +29,7 @@ use render::resource::pipeline::{
 use render::resource::{
     buffer::BufferCopy,
     render_pass::{
-        Attachment, AttachmentLoadOp, AttachmentRef, AttachmentStoreOp, SubpassDependency,
-        SubpassDescriptor,
+        Attachment, AttachmentRef, LoadOp, StoreOp, SubpassDependency, SubpassDescriptor,
     },
 };
 use render::resource::{buffer::BufferRange, glue::MixturePart, pipeline::ShaderType};
@@ -229,25 +228,25 @@ impl ToHalType for TextureLayout {
     }
 }
 
-impl ToHalType for AttachmentLoadOp {
+impl ToHalType for LoadOp {
     type Target = HalAttachmentLoadOp;
 
     fn convert(self) -> Self::Target {
         match self {
-            AttachmentLoadOp::Load => HalAttachmentLoadOp::Load,
-            AttachmentLoadOp::Clear => HalAttachmentLoadOp::Clear,
-            AttachmentLoadOp::DontCare => HalAttachmentLoadOp::DontCare,
+            LoadOp::Load => HalAttachmentLoadOp::Load,
+            LoadOp::Clear => HalAttachmentLoadOp::Clear,
+            LoadOp::DontCare => HalAttachmentLoadOp::DontCare,
         }
     }
 }
 
-impl ToHalType for AttachmentStoreOp {
+impl ToHalType for StoreOp {
     type Target = HalAttachmentStoreOp;
 
     fn convert(self) -> Self::Target {
         match self {
-            AttachmentStoreOp::Store => HalAttachmentStoreOp::Store,
-            AttachmentStoreOp::DontCare => HalAttachmentStoreOp::DontCare,
+            StoreOp::Store => HalAttachmentStoreOp::Store,
+            StoreOp::DontCare => HalAttachmentStoreOp::DontCare,
         }
     }
 }

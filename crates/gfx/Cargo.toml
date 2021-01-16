@@ -8,11 +8,11 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.11"
+app = { path = "../app" }
 render = { path = "../render" }
 generational-arena = "0.2.8"
 raw-window-handle = "0.3.3"
 gfx-hal = "0.6.0"
-gfx-backend-vulkan = "0.6.5"
 parking_lot = "0.11.0"
 thiserror = "1.0.20"
 anyhow = "1.0.33"
@@ -21,3 +21,6 @@ bytemuck = { version =  "1.4.1", features = ["derive"] }
 # I really dont want to add shaderc, but because of a lack of better alternatives, here we go
 shaderc = "0.7.0"
 
+[dependencies.gfx-backend-vulkan]
+version = "0.6.5"
+features = ["x11"]

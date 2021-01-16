@@ -1,6 +1,6 @@
 use crate::compat::ToHalType;
 use crate::gfx_command::GfxCommand;
-use gfx_hal::command::{CommandBuffer, CommandBufferFlags, Level};
+use gfx_hal::{command::{CommandBuffer, CommandBufferFlags, Level}, window::SwapchainConfig};
 use gfx_hal::device::{Device, WaitFor};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
 use gfx_hal::prelude::CommandQueue;
@@ -126,7 +126,7 @@ impl<B: Backend> Swapper<B> {
                 let mut surface = self.surface.deref().write();
                 let caps: SurfaceCapabilities = surface.capabilities(&self.adapter.physical_device);
 
-                let extent = caps
+                let _extent = caps
                     .current_extent
                     // TODO: REMOVE!!!
                     .unwrap_or(self.surface_extent.read().unwrap_or(Extent2D {
@@ -134,10 +134,15 @@ impl<B: Backend> Swapper<B> {
                         height: 900,
                     }));
 
+                log::info!("Hi");
+
                 let mut swapchain_config = SwapchainConfig::from_caps(
                     &caps,
                     self.surface_format.clone().convert(),
-                    extent,
+                    Extent2D {
+                        width: 1600,
+                        height: 900
+                    },
                 );
                 // This seems to fix some fullscreen slowdown on macOS.
                 if caps.image_count.contains(&3) {
@@ -147,6 +152,8 @@ impl<B: Backend> Swapper<B> {
                 {
                     *self.surface_extent.write() = Some(swapchain_config.extent);
                 }
+
+                log::warn!("Swapchain Config: {:#?}", swapchain_config);
 
                 unsafe { surface.configure_swapchain(&self.device, swapchain_config)? };
             };
@@ -162,6 +169,11 @@ impl<B: Backend> Swapper<B> {
     }
 
     pub fn new_frame(&self) -> anyhow::Result<(u32, SwapchainImage<B>)> {
+        self.configure_swapchain()?;
+
+
+        log::trace!("1");
+
         let frame_idx = {
             let mut current_frame = self.current_frame.write();
             match current_frame.1 {
@@ -175,7 +187,8 @@ impl<B: Backend> Swapper<B> {
             }
         };
 
-        self.configure_swapchain()?;
+
+        log::trace!("2");
 
         // Wait for the in flight image of the current index
         unsafe {
@@ -183,16 +196,21 @@ impl<B: Backend> Swapper<B> {
 
             let mut this_frame = self.frames.get(frame_idx as usize).unwrap().lock();
 
+            log::trace!("2.1");
             self.device
                 .wait_for_fence(&this_frame.submission_fence, render_timeout_ns)?;
+            log::trace!("2.2");
             self.device.reset_fence(&this_frame.submission_fence)?;
-
+            log::trace!("2.3");
             // Now we also need to delete the command buffer in use
             if this_frame.in_use_command.is_some() {
                 let command_buffer = this_frame.in_use_command.take().unwrap();
                 self.command_pool.lock().free(vec![command_buffer]);
             }
         };
+
+
+        log::trace!("3");
 
         // Acquire Image
         Ok(unsafe {
@@ -277,7 +295,9 @@ impl<B: Backend> Swapper<B> {
                 Some(&this_frame.rendering_complete),
             );
 
-            if result.is_err() {
+            if let Err(e) = result {
+                log::warn!("Recovarable Error happened");
+                log::warn!("{:#?}", e);
                 self.should_configure_swapchain
                     .store(true, Ordering::Relaxed);
             }

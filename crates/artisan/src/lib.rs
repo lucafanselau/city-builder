@@ -9,7 +9,7 @@ use render::prelude::*;
 #[derive(Debug)]
 pub struct RawRenderContext<Context: GpuContext> {
     pub ctx: Arc<Context>,
-    pub resources: GpuResources<Context>,
+    pub resources: Arc<GpuResources<Context>>,
 }
 
 impl<Context: GpuContext> Drop for RawRenderContext<Context> {
@@ -18,7 +18,8 @@ impl<Context: GpuContext> Drop for RawRenderContext<Context> {
     }
 }
 
-pub type RenderContext = RawRenderContext<GfxContext>;
+pub type ActiveContext = GfxContext;
+pub type RenderContext = RawRenderContext<ActiveContext>;
 
 pub fn init_artisan(app: &mut App) {
     {
@@ -31,7 +32,7 @@ pub fn init_artisan(app: &mut App) {
             let ctx = Arc::new(GfxContext::new(&window_state.window));
             RenderContext {
                 ctx: ctx.clone(),
-                resources: GpuResources::<GfxContext>::new(ctx),
+                resources: Arc::new(GpuResources::<GfxContext>::new(ctx)),
             }
         };
 

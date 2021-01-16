@@ -8,3 +8,5 @@ mod memory_page;
 pub(crate) mod plumber;
 pub(crate) mod pool;
 pub(crate) mod swapper;
+
+mod graph;

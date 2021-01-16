@@ -1,11 +1,9 @@
-use std::{cell::Ref, path::Path};
+use std::{cell::{Ref, RefMut}, ops::Deref, path::Path};
 
 use app::{App, IntoFunctionSystem};
 use bytemuck::{Pod, Zeroable};
 use gfx::gfx_context::Context as GfxContext;
-use render::{
-    prelude::*,
-    resource::{
+use render::{graph::{self, graph::Graph, node::Node, nodes::{callbacks::FrameData, pass::PassNodeBuilder}}, prelude::*, resource::{
         frame::Clear,
         pipeline::{
             AttributeDescriptor, CullFace, Culling, GraphicsPipeline, PipelineShaders,
@@ -13,16 +11,11 @@ use render::{
             RenderContext as PipelineRenderContext, VertexAttributeFormat, VertexBufferDescriptor,
             VertexInputRate, Viewport, Winding,
         },
-        render_pass::{
-            Attachment, AttachmentLoadOp, AttachmentStoreOp, RenderPassDescriptor,
-            SubpassDescriptor,
-        },
-    },
-    util::format::TextureLayout,
-};
+        render_pass::{Attachment, LoadOp, RenderPassDescriptor, StoreOp, SubpassDescriptor},
+    }, util::format::TextureLayout};
 use window::{WindowState, WindowTiming};
 
-use crate::RenderContext;
+use crate::{ActiveContext, RenderContext};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
@@ -39,16 +32,14 @@ struct Offset {
 struct RendererState {
     vertex_buffer: Buffer<GfxContext>,
     offset_buffer: SwapBuffer<GfxContext, Offset>,
-    render_pass: <GfxContext as GpuContext>::RenderPassHandle,
-    pipeline: GraphicsPipeline<GfxContext>,
     glue_drops: Vec<Glue<GfxContext>>,
 }
 
 pub fn init(app: &mut App) {
-    let state = {
+    let graph = {
         let render_context = app.get_resources().get::<RenderContext>().unwrap();
-        let ctx = &render_context.ctx;
-        let resources = &render_context.resources;
+        let ctx = render_context.ctx.clone();
+        let resources = render_context.resources.clone();
 
         let vertices = [
             Vertex {
@@ -63,7 +54,8 @@ pub fn init(app: &mut App) {
         ];
         let vertex_size = std::mem::size_of::<Vertex>();
 
-        let vertex_buffer = resources.create_device_local_buffer("Vertex".into(), &vertices);
+        let vertex_buffer =
+            resources.create_device_local_buffer("Vertex".into(), BufferUsage::Vertex, &vertices);
 
         let frames_in_flight = ctx.swapchain_image_count();
 
@@ -88,81 +80,18 @@ pub fn init(app: &mut App) {
 
         let mixture = resources.stir(parts);
 
-        let (pipeline, render_pass) = {
-            let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
-                Path::new("assets/shaders/simple.vert").into(),
-            ));
-            let fragment_code = ctx.compile_shader(ShaderSource::GlslFile(
-                Path::new("assets/shaders/simple.frag").into(),
-            ));
+        // TODO: GRAPH
+        let mut graph = resources.create_graph();
 
-            let render_pass = {
-                let color_attachment = Attachment {
-                    format: ctx.get_surface_format(),
-                    load_op: AttachmentLoadOp::Clear,
-                    store_op: AttachmentStoreOp::Store,
-                    layouts: TextureLayout::Undefined..TextureLayout::Present,
-                };
+        // TODO: load that from file or something
 
-                let subpass = SubpassDescriptor {
-                    colors: vec![(0, TextureLayout::ColorAttachmentOptimal)],
-                    depth_stencil: None,
-                    inputs: vec![],
-                    resolves: vec![],
-                    preserves: vec![],
-                };
+        let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
+            Path::new("assets/shaders/simple.vert").into(),
+        ));
+        let fragment_code = ctx.compile_shader(ShaderSource::GlslFile(
+            Path::new("assets/shaders/simple.frag").into(),
+        ));
 
-                let desc = RenderPassDescriptor {
-                    attachments: vec![color_attachment],
-                    subpasses: vec![subpass],
-                    pass_dependencies: vec![],
-                };
-
-                ctx.create_render_pass(&desc)
-            };
-
-            let desc = GraphicsPipelineDescriptor {
-                name: "simple_pipeline".into(),
-                mixtures: vec![&mixture],
-                shaders: PipelineShaders {
-                    vertex: vertex_code,
-                    fragment: fragment_code,
-                    geometry: None,
-                },
-                rasterizer: Rasterizer {
-                    polygon_mode: PolygonMode::Fill,
-                    culling: Culling {
-                        winding: Winding::Clockwise,
-                        cull_face: CullFace::None,
-                    },
-                },
-                vertex_buffers: vec![VertexBufferDescriptor {
-                    binding: 0,
-                    stride: vertex_size as u32,
-                    rate: VertexInputRate::Vertex,
-                }],
-                attributes: vec![AttributeDescriptor {
-                    location: 0,
-                    binding: 0,
-                    offset: 0,
-                    format: VertexAttributeFormat::Vec4,
-                }],
-                primitive: Primitive::TriangleList,
-                blend_targets: vec![true],
-                depth: None,
-                pipeline_states: PipelineStates {
-                    viewport: PipelineState::Dynamic,
-                    scissor: PipelineState::Dynamic,
-                },
-            };
-
-            let pipeline = resources.create_graphics_pipeline(
-                desc,
-                PipelineRenderContext::RenderPass((&render_pass, 0)),
-            );
-
-            (pipeline, render_pass)
-        };
         let mut glue_drops = Vec::with_capacity(frames_in_flight);
 
         for i in 0..frames_in_flight {
@@ -175,17 +104,109 @@ pub fn init(app: &mut App) {
             glue_drops.push(glue_bottle.apply());
         }
 
-        RendererState {
-            vertex_buffer,
-            offset_buffer,
-            render_pass,
-            pipeline,
-            glue_drops,
+        let backbuffer = graph.get_backbuffer_attachment();
+        {
+            let mut builder = graph.build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
+            builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
+            builder.init(Box::new(move |rp| {
+                let ctx = ctx.clone();
+                let desc = GraphicsPipelineDescriptor {
+                    name: "simple_pipeline".into(),
+                    mixtures: vec![&mixture],
+                    shaders: PipelineShaders {
+                        vertex: vertex_code.clone(),
+                        fragment: fragment_code.clone(),
+                        geometry: None,
+                    },
+                    rasterizer: Rasterizer {
+                        polygon_mode: PolygonMode::Fill,
+                        culling: Culling {
+                            winding: Winding::Clockwise,
+                            cull_face: CullFace::None,
+                        },
+                    },
+                    vertex_buffers: vec![VertexBufferDescriptor {
+                        binding: 0,
+                        stride: vertex_size as u32,
+                        rate: VertexInputRate::Vertex,
+                    }],
+                    attributes: vec![AttributeDescriptor {
+                        location: 0,
+                        binding: 0,
+                        offset: 0,
+                        format: VertexAttributeFormat::Vec4,
+                    }],
+                    primitive: Primitive::TriangleList,
+                    blend_targets: vec![true],
+                    depth: None,
+                    pipeline_states: PipelineStates {
+                        viewport: PipelineState::Dynamic,
+                        scissor: PipelineState::Dynamic,
+                    },
+                };
+
+                let pipeline = resources
+                    .create_graphics_pipeline(desc, PipelineRenderContext::RenderPass((rp, 0)));
+                Box::new(pipeline)
+            }));
+            builder.callback(Box::new(move |frame, p, _w, _r| {
+                let cmd = frame.cmd;
+                let frame_index = frame.frame_index;
+
+                cmd.bind_graphics_pipeline(&p);
+
+                // TODO: Viewport
+                // cmd.set_viewport(0, viewport.clone());
+                // cmd.set_scissor(0, viewport.rect);
+
+                cmd.bind_vertex_buffer(0, vertex_buffer.deref(), BufferRange::WHOLE);
+
+                cmd.snort_glue(0, &p, &glue_drops[frame_index as usize]);
+
+                cmd.draw(0..3, 0..1);
+            }));
+            graph.add_node(Node::PassNode(builder.build()))
         }
+
+        // let (pipeline, render_pass) = {
+        //     let render_pass = {
+        //         let color_attachment = Attachment {
+        //             format: ctx.get_surface_format(),
+        //             load_op: LoadOp::Clear,
+        //             store_op: StoreOp::Store,
+        //             layouts: TextureLayout::Undefined..TextureLayout::Present,
+        //         };
+
+        //         let subpass = SubpassDescriptor {
+        //             colors: vec![(0, TextureLayout::ColorAttachmentOptimal)],
+        //             depth_stencil: None,
+        //             inputs: vec![],
+        //             resolves: vec![],
+        //             preserves: vec![],
+        //         };
+
+        //         let desc = RenderPassDescriptor {
+        //             attachments: vec![color_attachment],
+        //             subpasses: vec![subpass],
+        //             pass_dependencies: vec![],
+        //         };
+
+        //         ctx.create_render_pass(&desc)
+        //     };
+
+        //     (pipeline, render_pass)
+        // };
+
+        // RendererState {
+        //     vertex_buffer,
+        //     offset_buffer,
+        //     glue_drops,
+        // }
+        graph
     };
 
     app.get_resources()
-        .insert(state)
+        .insert(graph)
         .expect("[Artisan] failed to insert Renderer State");
 
     app.add_system(app::stages::RENDER, frame_render.into_system());
@@ -194,68 +215,58 @@ pub fn init(app: &mut App) {
 fn frame_render(
     render_context: Ref<RenderContext>,
     window: Ref<WindowState>,
-    state: Ref<RendererState>,
+    graph: RefMut<<ActiveContext as GpuContext>::ContextGraph>,
+    // state: Ref<RendererState>,
     timing: Ref<WindowTiming>,
 ) {
-    use std::borrow::Borrow;
-    use std::ops::Deref;
 
-    let ctx = &render_context.ctx;
+    // TODO: Execute graph
 
-    let elapsed = timing.elapsed;
-    let offset = Offset {
-        offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
-    };
-    state.offset_buffer.write(offset);
+    // let ctx = &render_context.ctx;
 
-    let (index, swapchain_image) = ctx.new_frame();
+    // let elapsed = timing.elapsed;
+    // let offset = Offset {
+    //     offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
+    // };
+    // state.offset_buffer.write(offset);
 
-    state.offset_buffer.frame(index);
+    // let (index, swapchain_image) = ctx.new_frame();
 
-    let extent = window.size;
-    let framebuffer = ctx.create_framebuffer(
-        &state.render_pass,
-        vec![swapchain_image.borrow()],
-        Extent3D {
-            width: extent.width,
-            height: extent.height,
-            depth: 1,
-        },
-    );
+    // state.offset_buffer.frame(index);
 
-    let viewport = Viewport {
-        rect: Rect {
-            x: 0,
-            y: 0,
-            width: extent.width as i16,
-            height: extent.height as i16,
-        },
-        depth: 0.0..1.0,
-    };
+    // let extent = window.size;
+    // let framebuffer = ctx.create_framebuffer(
+    //     &state.render_pass,
+    //     vec![swapchain_image.borrow()],
+    //     Extent3D {
+    //         width: extent.width,
+    //         height: extent.height,
+    //         depth: 1,
+    //     },
+    // );
 
-    let frame_commands = ctx.render_command(|cmd| {
-        cmd.begin_render_pass(
-            &state.render_pass,
-            &framebuffer,
-            viewport.clone().rect,
-            vec![Clear::Color(0.34, 0.12, 0.12, 1.0)],
-        );
+    // let viewport = Viewport {
+    //     rect: Rect {
+    //         x: 0,
+    //         y: 0,
+    //         width: extent.width as i16,
+    //         height: extent.height as i16,
+    //     },
+    //     depth: 0.0..1.0,
+    // };
 
-        cmd.bind_graphics_pipeline(&state.pipeline);
+    // let frame_commands = ctx.render_command(|cmd| {
+    //     cmd.begin_render_pass(
+    //         &state.render_pass,
+    //         &framebuffer,
+    //         viewport.clone().rect,
+    //         vec![Clear::Color(0.34, 0.12, 0.12, 1.0)],
+    //     );
 
-        cmd.set_viewport(0, viewport.clone());
-        cmd.set_scissor(0, viewport.rect);
+    //     cmd.end_render_pass();
+    // });
 
-        cmd.bind_vertex_buffer(0, state.vertex_buffer.deref(), BufferRange::WHOLE);
+    // ctx.end_frame(swapchain_image, frame_commands);
 
-        cmd.snort_glue(0, &state.pipeline, &state.glue_drops[index as usize]);
-
-        cmd.draw(0..3, 0..1);
-
-        cmd.end_render_pass();
-    });
-
-    ctx.end_frame(swapchain_image, frame_commands);
-
-    ctx.drop_framebuffer(framebuffer);
+    // ctx.drop_framebuffer(framebuffer);
 }

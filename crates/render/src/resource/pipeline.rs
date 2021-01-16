@@ -350,8 +350,8 @@ mod tests {
             let render_pass = {
                 let color_attachment = Attachment {
                     format: ctx.get_surface_format(),
-                    load_op: AttachmentLoadOp::Clear,
-                    store_op: AttachmentStoreOp::Store,
+                    load_op: LoadOp::Clear,
+                    store_op: StoreOp::Store,
                     layouts: TextureLayout::Undefined..TextureLayout::Present,
                 };
 

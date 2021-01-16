@@ -11,7 +11,7 @@ members = ["crates/ecs", "crates/render", "crates/app", "crates/gfx", "crates/wi
 
 [dependencies]
 log = "0.4.11"
-simplelog = { path = "../simplelog.rs" }
+simplelog = "0.9.0" #{ path = "../simplelog.rs" }
 
 app = { path = "crates/app" }
 artisan = { path = "crates/artisan" }

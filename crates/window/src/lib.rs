@@ -46,7 +46,7 @@ pub struct WindowTiming {
 pub fn init_window(app: &mut App) {
     let event_loop = {
         let resources = app.get_resources();
-        let size = winit::dpi::LogicalSize::new(1600, 900);
+        let size = winit::dpi::PhysicalSize::new(2400, 900);
         let (event_loop, window) =
             create_window("City Builder", size).expect("[Window] failed to build window");
 
@@ -81,13 +81,21 @@ pub fn init_window(app: &mut App) {
             *control_flow = ControlFlow::Poll;
 
             match event {
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => {
-                        *control_flow = ControlFlow::Exit;
-                        info!("The close button was pressed; stopping");
+                Event::WindowEvent { event, .. } => {
+                    // log::info!("{:#?}", event);
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                            info!("The close button was pressed; stopping");
+                        }
+                        WindowEvent::Resized(size) => {
+                            log::info!("Resized: {:?}", size);
+                            let mut window = resources.get_mut::<WindowState>().expect("[window] failed to get window state");
+                            window.size = size;
+                        }
+                        _ => (),
                     }
-                    _ => (),
-                },
+                }
                 Event::MainEventsCleared => {
                     {
                         let elapsed = startup.elapsed().as_secs_f32();

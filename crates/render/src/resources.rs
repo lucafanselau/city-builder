@@ -1,9 +1,9 @@
 use bytemuck::Pod;
 
-use crate::resource::{
+use crate::{graph::graph::Graph, resource::{
     glue::Glue,
     pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext},
-};
+}};
 use crate::{
     command_encoder::CommandEncoder,
     resource::{
@@ -107,5 +107,10 @@ impl<Context: GpuContext> GpuResources<Context> {
 
     pub fn disolve(&self, glue: Glue<Context>) -> GlueBottle<Context> {
         GlueBottle::<Context>::new(glue.handle, glue.parts)
+    }
+
+    pub fn create_graph(&self) -> <Context as GpuContext>::ContextGraph {
+        <<Context as GpuContext>::ContextGraph as Graph>::create(self.ctx.clone())
+
     }
 }
