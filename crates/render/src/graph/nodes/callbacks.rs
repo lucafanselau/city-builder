@@ -10,14 +10,13 @@ pub struct FrameData<'a, Context: GpuContext> {
     pub viewport: Viewport,
 }
 
-pub trait InitCallback<Context: GpuContext, U> = Fn(&<Context as GpuContext>::RenderPassHandle) -> Box<U>;
+pub trait InitCallback<Context: GpuContext, U> =
+    Fn(&<Context as GpuContext>::RenderPassHandle) -> Box<U>;
 pub trait PassCallback<Context: GpuContext, U> =
     Fn(FrameData<'_, Context>, &U, &mut World, &mut Resources);
 pub trait UserData = Send + Sync + 'static;
 
-
-
-pub(crate) trait PassCallbacks<Context: GpuContext> {
+pub trait PassCallbacks<Context: GpuContext> {
     fn init(&mut self, render_pass: &<Context as GpuContext>::RenderPassHandle);
     fn run(&self, data: FrameData<Context>, world: &mut World, resources: &mut Resources);
 }

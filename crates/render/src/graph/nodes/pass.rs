@@ -10,23 +10,18 @@ use crate::{
 
 use super::callbacks::{InitCallback, PassCallback, PassCallbacks, PassCallbacksImpl, UserData};
 
-pub struct PassAttachment<I: Sized> {
-    pub(crate) index: I,
-    pub(crate) load: LoadOp,
-    pub(crate) store: StoreOp,
-}
-
-pub struct PassData<Context: GpuContext> {
-    render_pass: Context::RenderPassHandle,
+pub struct PassAttachment<I: Clone> {
+    pub index: I,
+    pub load: LoadOp,
+    pub store: StoreOp,
 }
 
 pub struct PassNode<G: Graph + ?Sized> {
-    pub(crate) name: Cow<'static, str>,
-    pub(crate) output_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub(crate) input_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub(crate) depth_attachment: Option<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub(crate) pass_data: Option<PassData<<G as Graph>::Context>>,
-    pub(crate) callbacks: Box<dyn PassCallbacks<<G as Graph>::Context>>,
+    pub name: Cow<'static, str>,
+    pub output_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
+    pub input_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
+    pub depth_attachment: Option<PassAttachment<<G as Graph>::AttachmentIndex>>,
+    pub callbacks: Box<dyn PassCallbacks<<G as Graph>::Context>>,
 }
 
 // impl<Context: 'static + GpuContext, U: Send + Sync + 'static> Node for PassNode<Context, U> {
@@ -106,7 +101,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn init(
         &mut self,
-        func: Box<dyn InitCallback<<G as Graph>::Context, U> + 'static>
+        func: Box<dyn InitCallback<<G as Graph>::Context, U> + 'static>,
     ) -> &mut Self {
         self.init = Some(func);
         self
@@ -120,7 +115,10 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
         self
     }
 
-    pub fn build(&mut self) -> PassNode<G> where <G as Graph>::Context: 'static {
+    pub fn build(&mut self) -> PassNode<G>
+    where
+        <G as Graph>::Context: 'static,
+    {
         let init = self
             .init
             .take()
@@ -131,15 +129,13 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
             .take()
             .expect("[PassNodeBuilder] (build) no init callback");
 
-        let callbacks =
-            PassCallbacksImpl::create(init, runner);
+        let callbacks = PassCallbacksImpl::create(init, runner);
 
         PassNode {
             name: self.name.clone(),
             output_attachments: self.output_attachments.drain(..).collect(),
             input_attachments: self.input_attachments.drain(..).collect(),
             depth_attachment: self.depth_attachment.take(),
-            pass_data: None,
             callbacks: Box::new(callbacks),
         }
     }

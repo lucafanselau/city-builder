@@ -1,8 +1,11 @@
-use crate::{compat::{HalCompatibleSubpassDescriptor, ToHalType}, graph::GfxGraph};
 use crate::gfx_command::GfxCommand;
 use crate::heapy::{AllocationIndex, Heapy};
 use crate::plumber::Plumber;
 use crate::swapper::Swapper;
+use crate::{
+    compat::{HalCompatibleSubpassDescriptor, ToHalType},
+    graph::GfxGraph,
+};
 use bytemuck::Pod;
 use gfx_hal::format::Format;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
@@ -145,12 +148,11 @@ impl<B: Backend> GfxContext<B> {
                     )
                     .expect("failed to open device");
 
-                match gpu {
-                    Gpu {
-                        device,
-                        queue_groups,
-                    } => (device, queue_groups),
-                }
+                let Gpu {
+                    device,
+                    queue_groups,
+                } = gpu;
+                (device, queue_groups)
             };
 
             let mut queue_groups = queue_groups.into_iter();
@@ -215,6 +217,10 @@ impl<B: Backend> GfxContext<B> {
             swapper,
             pool,
         }
+    }
+
+    pub(crate) fn get_raw(&self) -> &B::Device {
+        &self.device
     }
 }
 
