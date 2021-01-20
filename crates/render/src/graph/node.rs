@@ -1,8 +1,9 @@
-use crate::prelude::GpuContext;
+use super::{nodes::pass::PassNode, Graph};
 
-use super::{graph::Graph, nodes::pass::PassNode};
-
-pub enum Node<G> where G: Graph + ?Sized {
+pub enum Node<G>
+where
+    G: Graph + ?Sized,
+{
     PassNode(PassNode<G>),
 }
 

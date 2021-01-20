@@ -1,9 +1,9 @@
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
+use std::{borrow::Cow, sync::Arc};
 
 use app::{Resources, World};
-use generational_arena::{Arena, Index};
+use generational_arena::Arena;
 use gfx_hal::Backend;
-use render::graph::{attachment::GraphAttachment, graph::Graph, node::Node};
+use render::graph::{attachment::GraphAttachment, node::Node, Graph};
 
 use crate::gfx_context::GfxContext;
 
@@ -60,7 +60,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
         AttachmentIndex::Backbuffer
     }
 
-    fn execute(&mut self, world: &mut World, resources: &mut Resources) {
+    fn execute(&mut self, _world: &mut World, _resources: &mut Resources) {
         log::info!("EXECUTE");
         todo!()
     }

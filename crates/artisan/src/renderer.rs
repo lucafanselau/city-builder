@@ -109,7 +109,7 @@ pub fn init(app: &mut App) {
             let mut builder = graph.build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
             builder.init(Box::new(move |rp| {
-                let ctx = ctx.clone();
+                let _ctx = ctx.clone();
                 let desc = GraphicsPipelineDescriptor {
                     name: "simple_pipeline".into(),
                     mixtures: vec![&mixture],
@@ -213,11 +213,11 @@ pub fn init(app: &mut App) {
 }
 
 fn frame_render(
-    render_context: Ref<RenderContext>,
-    window: Ref<WindowState>,
-    graph: RefMut<<ActiveContext as GpuContext>::ContextGraph>,
+    _render_context: Ref<RenderContext>,
+    _window: Ref<WindowState>,
+    _graph: RefMut<<ActiveContext as GpuContext>::ContextGraph>,
     // state: Ref<RendererState>,
-    timing: Ref<WindowTiming>,
+    _timing: Ref<WindowTiming>,
 ) {
 
     // TODO: Execute graph

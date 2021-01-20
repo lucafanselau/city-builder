@@ -1,4 +1,3 @@
-use crate::{graph::graph::Graph, resource::{frame::{Extent2D, Extent3D}, glue::DescriptorWrite, render_pass::RenderPassDescriptor}};
 use crate::resource::{
     glue::Mixture,
     pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
@@ -7,6 +6,10 @@ use crate::util::format::TextureFormat;
 use crate::{
     command_encoder::CommandEncoder,
     resource::{buffer::BufferDescriptor, glue::MixturePart},
+};
+use crate::{
+    graph::Graph,
+    resource::{frame::Extent3D, glue::DescriptorWrite, render_pass::RenderPassDescriptor},
 };
 use bytemuck::Pod;
 use std::borrow::Borrow;
@@ -37,7 +40,9 @@ pub trait GpuContext: Send + Sync {
     /// Create a buffer that is not bound to any memory, see bind_memory for that
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle;
 
-    /// Safety: this is only valid for buffers that are writable, eg. memory_type == HostVisible
+    /// # Safety
+    ///
+    /// this is only valid for buffers that are writable, eg. memory_type == HostVisible
     unsafe fn write_to_buffer<D: Pod>(&self, buffer: &Self::BufferHandle, data: &D);
 
     /// Drop a Buffer handle

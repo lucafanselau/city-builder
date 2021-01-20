@@ -3,18 +3,12 @@ use std::ops::Range;
 use generational_arena::{Arena, Index};
 use gfx_hal::{
     device::Device,
-    format::Format,
-    image::{Layout, NumSamples},
-    pass::{Attachment, AttachmentOps, AttachmentRef, Subpass, SubpassDependency, SubpassDesc},
+    image::Layout,
+    pass::{Attachment, AttachmentOps, AttachmentRef, SubpassDependency, SubpassDesc},
     Backend,
 };
 use render::{
-    graph::{
-        attachment::GraphAttachment,
-        graph::Graph,
-        node::Node,
-        nodes::pass::{PassAttachment, PassNode},
-    },
+    graph::{attachment::GraphAttachment, node::Node, nodes::pass::PassNode},
     resource::render_pass::{LoadOp, StoreOp},
 };
 

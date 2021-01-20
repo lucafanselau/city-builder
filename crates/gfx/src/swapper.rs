@@ -1,6 +1,6 @@
 use crate::compat::ToHalType;
 use crate::gfx_command::GfxCommand;
-use gfx_hal::{command::{CommandBuffer, CommandBufferFlags, Level}, window::SwapchainConfig};
+use gfx_hal::{command::{CommandBuffer, CommandBufferFlags, Level}};
 use gfx_hal::device::{Device, WaitFor};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
 use gfx_hal::prelude::CommandQueue;

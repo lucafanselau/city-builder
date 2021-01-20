@@ -1,37 +1,37 @@
+use std::{borrow::Cow, sync::Arc};
+
+use app::{Resources, World};
+
+use crate::prelude::GpuContext;
+
+use self::{
+    attachment::GraphAttachment,
+    node::Node,
+    nodes::{callbacks::UserData, pass::PassNodeBuilder},
+};
+
 pub mod attachment;
 
 // Disabled but should be reusable in gfx
 // pub mod builder;
 pub mod node;
 pub mod nodes;
-pub mod graph;
 
-// pub struct Graph<Context: GpuContext> {
-//     pub attachments: Arena<GraphAttachment>,
-//     pub nodes: Vec<Node<Context>>,
-//     pub is_dirty: bool,
-// }
+pub trait Graph {
+    type Context: GpuContext;
+    type AttachmentIndex: Clone;
 
-// impl<Context: GpuContext> Graph<Context> {
-//     pub fn new() -> Self {
-//         Self {
-//             attachments: Arena::new(),
-//             nodes: Vec::new(),
-//             is_dirty: true,
-//         }
-//     }
+    fn create(ctx: Arc<Self::Context>) -> Self;
 
-//     pub fn add_attachment(
-//         &mut self,
-//         size: AttachmentSize,
-//         format: TextureFormat,
-//     ) -> AttachmentIndex {
-//         self.is_dirty = true;
-//         self.attachments.insert(GraphAttachment::new(size, format))
-//     }
+    fn add_node(&mut self, node: Node<Self>);
+    fn add_attachment(&mut self, attachment: GraphAttachment) -> Self::AttachmentIndex;
+    fn attachment_index(&self, name: Cow<'static, str>) -> Option<Self::AttachmentIndex>;
 
-//     pub fn add_node(&mut self, n: Node<Context>) {
-//         self.is_dirty = true;
-//         self.nodes.push(n);
-//     }
-// }
+    fn get_backbuffer_attachment(&self) -> Self::AttachmentIndex;
+
+    fn execute(&mut self, world: &mut World, resources: &mut Resources);
+
+    fn build_pass_node<U: UserData>(&self, name: Cow<'static, str>) -> PassNodeBuilder<Self, U> {
+        PassNodeBuilder::new(name)
+    }
+}

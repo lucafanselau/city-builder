@@ -1,9 +1,5 @@
 use bytemuck::Pod;
 
-use crate::{graph::graph::Graph, resource::{
-    glue::Glue,
-    pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext},
-}};
 use crate::{
     command_encoder::CommandEncoder,
     resource::{
@@ -14,6 +10,13 @@ use crate::{
 use crate::{
     context::GpuContext,
     resource::glue::{Mixture, MixturePart},
+};
+use crate::{
+    graph::Graph,
+    resource::{
+        glue::Glue,
+        pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext},
+    },
 };
 use std::{borrow::Cow, mem::ManuallyDrop, sync::Arc};
 
@@ -62,7 +65,7 @@ impl<Context: GpuContext> GpuResources<Context> {
                 name: name.clone(),
                 size,
                 memory_type: MemoryType::DeviceLocal,
-                usage: BufferUsage::Vertex,
+                usage,
             };
 
             self.ctx.create_buffer(&desc)
@@ -111,6 +114,5 @@ impl<Context: GpuContext> GpuResources<Context> {
 
     pub fn create_graph(&self) -> <Context as GpuContext>::ContextGraph {
         <<Context as GpuContext>::ContextGraph as Graph>::create(self.ctx.clone())
-
     }
 }

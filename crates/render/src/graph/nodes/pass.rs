@@ -1,10 +1,7 @@
-use std::{borrow::Cow, ops::Deref};
-
-use app::{Resources, World};
+use std::borrow::Cow;
 
 use crate::{
-    graph::graph::Graph,
-    prelude::GpuContext,
+    graph::Graph,
     resource::render_pass::{LoadOp, StoreOp},
 };
 
