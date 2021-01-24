@@ -12,10 +12,25 @@ use crate::{
     resource::{frame::Extent3D, glue::DescriptorWrite, render_pass::RenderPassDescriptor},
 };
 use bytemuck::Pod;
+use raw_window_handle::HasRawWindowHandle;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 
+pub trait GpuBuilder {
+    type Context: GpuContext;
+
+    fn new() -> Self;
+
+    fn create_surface<W: HasRawWindowHandle>(
+        &mut self,
+        window: &W,
+    ) -> <Self::Context as GpuContext>::SurfaceHandle;
+
+    fn build(self) -> Self::Context;
+}
+
 pub trait GpuContext: Send + Sync {
+    type SurfaceHandle: Send + Sync + Clone; // TODO: Maybe add specific Trait
     type BufferHandle: Send + Sync + Debug;
     type PipelineHandle: Send + Sync + Debug;
     type RenderPassHandle: Send + Sync + Debug;
@@ -28,7 +43,7 @@ pub trait GpuContext: Send + Sync {
     /// eg. The Command buffer in recording state
     type CommandEncoder: CommandEncoder<Self> + Debug + Send + Sync;
     type SwapchainImage: Borrow<Self::ImageView> + Debug + Send + Sync;
-    type ContextGraph: Graph<Context = Self>;
+    type ContextGraph: Graph;
     // Oke we will need to create abstractions for all of these first
     // fn create_initialized_buffer(
     //     &self,
@@ -69,7 +84,7 @@ pub trait GpuContext: Send + Sync {
     // TODO: if we want to support multi surface or headless drawing a surface can not be bound to
     //  the context...
     /// Will return the format of the created surface
-    fn get_surface_format(&self) -> TextureFormat;
+    // fn get_surface_format(&self) -> TextureFormat;
 
     // Framebuffers
     fn create_framebuffer<I>(
@@ -101,17 +116,20 @@ pub trait GpuContext: Send + Sync {
     );
 
     // Single Shot Commands -> Transfer etc.
-    fn single_shot_command(&self, should_wait: bool, cb: impl FnOnce(&mut Self::CommandEncoder));
+    // fn single_shot_command(&self, should_wait: bool, cb: impl FnOnce(&mut Self::CommandEncoder));
 
     // DEPRECATED: In favor of the new graph api
     // Rendering API
     //
     // This API is temporary and im not quite sure how to abstract that away
-    fn new_frame(&self) -> (u32, Self::SwapchainImage);
-    fn end_frame(&self, swapchain_image: Self::SwapchainImage, frame_commands: Self::CommandBuffer);
-    fn render_command(&self, cb: impl FnOnce(&mut Self::CommandEncoder)) -> Self::CommandBuffer;
-    fn swapchain_image_count(&self) -> usize;
+    // fn new_frame(&self) -> (u32, Self::SwapchainImage);
+    // fn end_frame(&self, swapchain_image: Self::SwapchainImage, frame_commands: Self::CommandBuffer);
+    // fn render_command(&self, cb: impl FnOnce(&mut Self::CommandEncoder)) -> Self::CommandBuffer;
+    // fn swapchain_image_count(&self) -> usize;
     // fn handle_resize(&self, size: Extent2D);
 
     fn wait_idle(&self);
+
+    // Create a Graph object (will replace the Rendering API above)
+    fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::ContextGraph;
 }

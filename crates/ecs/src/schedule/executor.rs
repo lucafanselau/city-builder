@@ -3,7 +3,7 @@ use hecs::World;
 
 /// Types that can execute a Scheduler's schedule
 pub trait ScheduleExecutor {
-    fn execute(schedule: &Scheduler, world: &World, resources: &Resources);
+    fn execute(schedule: &mut Scheduler, world: &mut World, resources: &mut Resources);
 }
 
 /// Really really basic sequential executor (should be replaced by a multi-threaded one
@@ -13,7 +13,7 @@ pub trait ScheduleExecutor {
 pub struct SequentialExecutor;
 
 impl ScheduleExecutor for SequentialExecutor {
-    fn execute(schedule: &Scheduler, world: &World, resources: &Resources) {
+    fn execute(schedule: &mut Scheduler, world: &mut World, resources: &mut Resources) {
         for stage in schedule.order.iter() {
             // for now we will just execute each stage sequentially on one thread
             if let Some(systems) = schedule.stages.get(stage) {
@@ -22,6 +22,10 @@ impl ScheduleExecutor for SequentialExecutor {
                     system.run(world, resources);
                 }
             }
+        }
+        // at the end we will execute the thread local ones
+        for system in schedule.mut_systems.iter_mut() {
+            system.run(world, resources)
         }
     }
 }

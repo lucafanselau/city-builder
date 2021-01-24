@@ -35,54 +35,54 @@ impl<Context: GpuContext> GpuResources<Context> {
         Buffer::new(desc.name, handle, self.ctx.clone())
     }
 
-    pub fn create_device_local_buffer<T: Pod>(
-        &self,
-        name: Cow<'static, str>,
-        usage: BufferUsage,
-        data: &T,
-    ) -> Buffer<Context> {
-        let size = std::mem::size_of::<T>() as u64;
+    // pub fn create_device_local_buffer<T: Pod>(
+    //     &self,
+    //     name: Cow<'static, str>,
+    //     usage: BufferUsage,
+    //     data: &T,
+    // ) -> Buffer<Context> {
+    //     let size = std::mem::size_of::<T>() as u64;
 
-        let staging_buffer = {
-            let staging_desc = BufferDescriptor {
-                name: format!("{}-staging", name).into(),
-                size,
-                memory_type: MemoryType::HostVisible,
-                usage: BufferUsage::Staging,
-            };
+    //     let staging_buffer = {
+    //         let staging_desc = BufferDescriptor {
+    //             name: format!("{}-staging", name).into(),
+    //             size,
+    //             memory_type: MemoryType::HostVisible,
+    //             usage: BufferUsage::Staging,
+    //         };
 
-            let handle = self.ctx.create_buffer(&staging_desc);
+    //         let handle = self.ctx.create_buffer(&staging_desc);
 
-            unsafe {
-                self.ctx.write_to_buffer(&handle, data);
-            }
+    //         unsafe {
+    //             self.ctx.write_to_buffer(&handle, data);
+    //         }
 
-            handle
-        };
+    //         handle
+    //     };
 
-        let handle = {
-            let desc = BufferDescriptor {
-                name: name.clone(),
-                size,
-                memory_type: MemoryType::DeviceLocal,
-                usage,
-            };
+    //     let handle = {
+    //         let desc = BufferDescriptor {
+    //             name: name.clone(),
+    //             size,
+    //             memory_type: MemoryType::DeviceLocal,
+    //             usage,
+    //         };
 
-            self.ctx.create_buffer(&desc)
-        };
+    //         self.ctx.create_buffer(&desc)
+    //     };
 
-        self.ctx.single_shot_command(true, |cmd| {
-            let copy = BufferCopy {
-                src_offset: 0,
-                dst_offset: 0,
-                size,
-            };
-            cmd.copy_buffer(&staging_buffer, &handle, vec![copy]);
-        });
+    //     self.ctx.single_shot_command(true, |cmd| {
+    //         let copy = BufferCopy {
+    //             src_offset: 0,
+    //             dst_offset: 0,
+    //             size,
+    //         };
+    //         cmd.copy_buffer(&staging_buffer, &handle, vec![copy]);
+    //     });
 
-        self.ctx.drop_buffer(staging_buffer);
-        Buffer::new(name, handle, self.ctx.clone())
-    }
+    //     self.ctx.drop_buffer(staging_buffer);
+    //     Buffer::new(name, handle, self.ctx.clone())
+    // }
 
     pub fn create_graphics_pipeline(
         &self,
@@ -110,9 +110,5 @@ impl<Context: GpuContext> GpuResources<Context> {
 
     pub fn disolve(&self, glue: Glue<Context>) -> GlueBottle<Context> {
         GlueBottle::<Context>::new(glue.handle, glue.parts)
-    }
-
-    pub fn create_graph(&self) -> <Context as GpuContext>::ContextGraph {
-        <<Context as GpuContext>::ContextGraph as Graph>::create(self.ctx.clone())
     }
 }

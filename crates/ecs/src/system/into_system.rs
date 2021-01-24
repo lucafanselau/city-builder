@@ -6,6 +6,8 @@ use crate::{
 };
 use hecs::{Query as HecsQuery, QueryBorrow, World};
 
+use super::{MutatingFunctionSystem, MutatingFunctionSystemCallback, MutatingSystem};
+
 pub trait IntoFunctionSystem<Resources: ResourceQuery, Q: HecsQuery> {
     fn into_system(self) -> Box<dyn System>;
 }
@@ -58,6 +60,20 @@ macro_rules! impl_into_systems {
 impl_into_systems!();
 impl_into_systems!(A);
 impl_into_systems!(A, B);
+
+// Trait for Thread Local Systems
+pub trait IntoMutatingSystem {
+    fn into_mut_system(self) -> Box<dyn MutatingSystem>;
+}
+
+impl<Func: MutatingFunctionSystemCallback> IntoMutatingSystem for Func {
+    fn into_mut_system(self) -> Box<dyn MutatingSystem> {
+        Box::new(MutatingFunctionSystem {
+            callback: self,
+            name: std::any::type_name::<Self>().into(),
+        })
+    }
+}
 
 // Same number of resources as in resource_query.rs
 

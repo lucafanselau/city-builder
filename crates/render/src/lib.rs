@@ -2,9 +2,12 @@
 
 pub mod command_encoder;
 pub mod context;
+pub mod context_builder;
 pub mod resource;
 pub mod resources;
 pub mod util;
+
+// pub mod surface;
 
 pub mod graph;
 

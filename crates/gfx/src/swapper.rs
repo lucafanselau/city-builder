@@ -1,6 +1,6 @@
 use crate::compat::ToHalType;
 use crate::gfx_command::GfxCommand;
-use gfx_hal::{command::{CommandBuffer, CommandBufferFlags, Level}};
+use gfx_hal::command::{CommandBuffer, CommandBufferFlags, Level};
 use gfx_hal::device::{Device, WaitFor};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
 use gfx_hal::prelude::CommandQueue;
@@ -141,7 +141,7 @@ impl<B: Backend> Swapper<B> {
                     self.surface_format.clone().convert(),
                     Extent2D {
                         width: 1600,
-                        height: 900
+                        height: 900,
                     },
                 );
                 // This seems to fix some fullscreen slowdown on macOS.
@@ -171,7 +171,6 @@ impl<B: Backend> Swapper<B> {
     pub fn new_frame(&self) -> anyhow::Result<(u32, SwapchainImage<B>)> {
         self.configure_swapchain()?;
 
-
         log::trace!("1");
 
         let frame_idx = {
@@ -186,7 +185,6 @@ impl<B: Backend> Swapper<B> {
                 }
             }
         };
-
 
         log::trace!("2");
 
@@ -208,7 +206,6 @@ impl<B: Backend> Swapper<B> {
                 self.command_pool.lock().free(vec![command_buffer]);
             }
         };
-
 
         log::trace!("3");
 
@@ -305,7 +302,7 @@ impl<B: Backend> Swapper<B> {
     }
 
     pub fn get_frames_in_flight(&self) -> usize {
-        self.frames_in_flight as usize
+        snnelf.frames_in_flight as usize
     }
 
     pub fn one_shot(

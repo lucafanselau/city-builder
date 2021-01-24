@@ -7,6 +7,7 @@ use crate::{
 
 use super::callbacks::{InitCallback, PassCallback, PassCallbacks, PassCallbacksImpl, UserData};
 
+#[derive(Clone)]
 pub struct PassAttachment<I: Clone> {
     pub index: I,
     pub load: LoadOp,
@@ -53,7 +54,7 @@ pub struct PassNodeBuilder<G: Graph + ?Sized, U: UserData> {
 }
 
 impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
-    pub(crate) fn new(name: Cow<'static, str>) -> Self {
+    pub fn new(name: Cow<'static, str>) -> Self {
         Self {
             name,
             output_attachments: Vec::new(),

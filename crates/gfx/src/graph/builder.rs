@@ -10,6 +10,7 @@ use gfx_hal::{
 use render::{
     graph::{attachment::GraphAttachment, node::Node, nodes::pass::PassNode},
     resource::render_pass::{LoadOp, StoreOp},
+    util::format::TextureFormat,
 };
 
 use crate::compat::ToHalType;
@@ -24,9 +25,12 @@ pub(super) fn build_node<B: Backend>(
     ctx: &B::Device,
     node: Node<GfxGraph<B>>,
     attachments: &Arena<GraphAttachment>,
+    surface_format: TextureFormat,
 ) -> GfxNode<B> {
     match node {
-        Node::PassNode(n) => GfxNode::PassNode(build_pass_node(ctx, n, attachments)),
+        Node::PassNode(n) => {
+            GfxNode::PassNode(build_pass_node(ctx, n, attachments, surface_format))
+        }
     }
 }
 
@@ -53,8 +57,9 @@ fn build_attachment<B: Backend>(
 
 fn build_pass_node<B: Backend>(
     ctx: &B::Device,
-    node: PassNode<GfxGraph<B>>,
+    mut node: PassNode<GfxGraph<B>>,
     graph_attachments: &Arena<GraphAttachment>,
+    surface_format: TextureFormat,
 ) -> GfxPassNode<B> {
     // ctx.create_render_pass(attachments, subpasses, dependencies);
 
@@ -73,9 +78,13 @@ fn build_pass_node<B: Backend>(
             a.store.clone(),
             Layout::Undefined..Layout::ShaderReadOnlyOptimal,
         ),
-        AttachmentIndex::Backbuffer => {
-            todo!()
-        }
+        AttachmentIndex::Backbuffer => Attachment {
+            format: Some(surface_format.clone().convert()),
+            samples: 1u8,
+            ops: AttachmentOps::new(a.load.clone().convert(), a.store.clone().convert()),
+            stencil_ops: AttachmentOps::DONT_CARE,
+            layouts: Layout::Undefined..Layout::ShaderReadOnlyOptimal,
+        },
     }));
 
     attachments.extend(node.input_attachments.iter().map(|a| match a.index {
@@ -136,6 +145,8 @@ fn build_pass_node<B: Backend>(
         ctx.create_render_pass(attachments, &vec![subpass], dependencies)
             .expect("Failed to build PassNode")
     };
+
+    node.callbacks.init(&render_pass);
 
     GfxPassNode {
         graph_node: node,

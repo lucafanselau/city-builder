@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 
-use crate::system::System;
+use crate::system::{MutatingSystem, System};
 
 use thiserror::Error;
 
@@ -21,6 +21,8 @@ pub enum AddSystemError {
 
 pub struct Scheduler {
     pub(crate) stages: HashMap<Cow<'static, str>, Vec<Box<dyn System>>>,
+    // NOTE(luca): Currently they will all be executed at the end
+    pub(crate) mut_systems: Vec<Box<dyn MutatingSystem>>,
     pub(crate) order: Vec<Cow<'static, str>>,
 }
 
@@ -28,6 +30,7 @@ impl Scheduler {
     pub fn new() -> Self {
         Self {
             stages: Default::default(),
+            mut_systems: Default::default(),
             order: vec![],
         }
     }
@@ -128,6 +131,10 @@ impl Scheduler {
     ) {
         self.try_add_system_to_stage(stage, system)
             .expect("failed to add system")
+    }
+
+    pub fn add_mut_system(&mut self, system: Box<dyn MutatingSystem>) {
+        self.mut_systems.push(system)
     }
 }
 

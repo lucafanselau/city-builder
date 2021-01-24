@@ -3,6 +3,7 @@
 pub mod stages;
 
 pub use ecs::prelude::*;
+use ecs::system::MutatingSystem;
 use std::borrow::Cow;
 
 pub struct App {
@@ -43,6 +44,10 @@ impl App {
 
     pub fn add_system(&mut self, stage: impl Into<Cow<'static, str>>, system: Box<dyn System>) {
         self.scheduler.add_system_to_stage(stage, system);
+    }
+
+    pub fn add_mut_system(&mut self, system: Box<dyn MutatingSystem>) {
+        self.scheduler.add_mut_system(system)
     }
 
     pub fn set_runner<Func>(&mut self, runner: Func)

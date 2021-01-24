@@ -72,7 +72,7 @@ pub fn init_window(app: &mut App) {
         event_loop
     };
 
-    app.set_runner(|world, resources, scheduler| {
+    app.set_runner(|mut world, mut resources, mut scheduler| {
         let startup = Instant::now();
 
         event_loop.run(move |event, _, control_flow| {
@@ -90,7 +90,9 @@ pub fn init_window(app: &mut App) {
                         }
                         WindowEvent::Resized(size) => {
                             log::info!("Resized: {:?}", size);
-                            let mut window = resources.get_mut::<WindowState>().expect("[window] failed to get window state");
+                            let mut window = resources
+                                .get_mut::<WindowState>()
+                                .expect("[window] failed to get window state");
                             window.size = size;
                         }
                         _ => (),
@@ -111,7 +113,8 @@ pub fn init_window(app: &mut App) {
                 }
                 Event::RedrawRequested(_) => {
                     // This dumb af
-                    SequentialExecutor::execute(&scheduler, &world, &resources);
+                    //
+                    SequentialExecutor::execute(&mut scheduler, &mut world, &mut resources);
                 }
                 _ => (),
             }

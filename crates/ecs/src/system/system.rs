@@ -38,3 +38,39 @@ impl<Func: FunctionSystemCallback> System for FunctionSystem<Func> {
         (self.callback)(world, resources);
     }
 }
+
+pub trait MutatingSystem {
+    fn name(&self) -> Cow<'static, str>;
+    fn run(&mut self, world: &mut hecs::World, resources: &mut Resources);
+}
+
+pub trait MutatingFunctionSystemCallback = FnMut(&mut hecs::World, &mut Resources) + 'static;
+
+pub struct MutatingFunctionSystem<Func>
+where
+    Func: MutatingFunctionSystemCallback,
+{
+    pub(crate) callback: Func,
+    pub(crate) name: Cow<'static, str>,
+}
+
+impl<Func: MutatingFunctionSystemCallback> MutatingFunctionSystem<Func> {
+    // TODO: Remove
+    #[allow(dead_code)]
+    pub fn new(func: Func, name: Cow<'static, str>) -> Self {
+        MutatingFunctionSystem {
+            callback: func,
+            name: name.clone(),
+        }
+    }
+}
+
+impl<Func: MutatingFunctionSystemCallback> MutatingSystem for MutatingFunctionSystem<Func> {
+    fn name(&self) -> Cow<'static, str> {
+        self.name.clone()
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut Resources) {
+        (self.callback)(world, resources);
+    }
+}
