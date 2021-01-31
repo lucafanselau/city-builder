@@ -21,7 +21,7 @@ use render::resource::glue::{DescriptorWrite, Mixture};
 
 use super::{
     compat::{get_descriptor_type, ToHalType},
-    gfx_context::GfxContext,
+    context::GfxContext,
 };
 
 #[derive(Debug)]

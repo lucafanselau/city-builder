@@ -1,8 +1,5 @@
 mod log;
 
-use app;
-use window;
-
 fn main() {
     log::init_logger();
     let mut app = app::App::new();

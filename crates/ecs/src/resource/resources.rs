@@ -29,6 +29,12 @@ pub enum InsertResourceError {
     DuplicateResource(TypeId),
 }
 
+impl Default for Resources {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Resources {
     /// Constructs an empty Resources Object
     pub fn new() -> Self {
@@ -38,13 +44,14 @@ impl Resources {
     }
 
     pub fn insert<T: Resource>(&mut self, initial: T) -> Result<(), InsertResourceError> {
+        use std::collections::hash_map::Entry;
         let type_id = TypeId::of::<T>();
-        if self.storage.contains_key(&type_id) {
-            Err(InsertResourceError::DuplicateResource(type_id))
-        } else {
-            self.storage
-                .insert(type_id, Box::new(RefCell::new(initial)));
-            Ok(())
+        match self.storage.entry(type_id) {
+            Entry::Occupied(_) => Err(InsertResourceError::DuplicateResource(type_id)),
+            Entry::Vacant(e) => {
+                e.insert(Box::new(RefCell::new(initial)));
+                Ok(())
+            }
         }
     }
 

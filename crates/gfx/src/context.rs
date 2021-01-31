@@ -1,34 +1,28 @@
 use crate::heapy::{AllocationIndex, Heapy};
 use crate::plumber::Plumber;
+use crate::{command::GfxCommand, context_builder::GfxBuilder};
 use crate::{
     compat::{HalCompatibleSubpassDescriptor, ToHalType},
     graph::GfxGraph,
 };
-use crate::{context_builder::GfxBuilder, gfx_command::GfxCommand};
 use bytemuck::Pod;
-use gfx_hal::format::Format;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
 use gfx_hal::queue::QueueFamilyId;
 use gfx_hal::window::PresentationSurface;
-use gfx_hal::{
-    adapter::{Adapter, DeviceType},
-    Instance,
-};
+
 use gfx_hal::{device::Device, Backend};
-use log::{debug, info};
-use parking_lot::{Mutex, RwLock};
-use raw_window_handle::HasRawWindowHandle;
-use render::resource::frame::Extent3D;
+use parking_lot::Mutex;
+use render::resource::frame::{Extent2D, Extent3D};
 use render::resource::glue::Mixture;
 use render::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use render::resource::render_pass::RenderPassDescriptor;
-use render::util::format::TextureFormat;
+
 use render::{
     context::GpuBuilder,
     resource::buffer::{BufferDescriptor, BufferUsage},
 };
 use render::{context::GpuContext, resource::glue::DescriptorWrite};
-use std::{borrow::Borrow, ops::DerefMut};
+use std::borrow::Borrow;
 use std::{ops::Deref, sync::Arc};
 
 use super::pool::{LayoutHandle, Pool, SetHandle};
@@ -60,19 +54,20 @@ where
     // Pipelines
     pub(crate) plumber: Plumber<B>,
     // DEPRECATED: Swapchain
-    // pub(crate) swapper: Swapper<B>,
+    // pub(crate) swapper: Swapper<B>,nn
     // Pool -> Descriptor Sets
     pub(crate) pool: Pool<B>,
 }
 
 impl<B: Backend> GfxContext<B> {
+    #[allow(dead_code)]
     pub(crate) fn get_raw(&self) -> &B::Device {
         &self.device
     }
 }
 
 impl<B: Backend> GpuContext for GfxContext<B> {
-    type SurfaceHandle = Arc<Mutex<B::Surface>>;
+    type SurfaceHandle = (Arc<Mutex<B::Surface>>, Extent2D);
     type BufferHandle = (B::Buffer, AllocationIndex);
     type PipelineHandle = (B::GraphicsPipeline, B::PipelineLayout);
     type RenderPassHandle = B::RenderPass;
@@ -268,9 +263,11 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     }
 
     fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::ContextGraph {
+        let (surface, extent) = surface;
         GfxGraph::<B>::new(
             self.device.clone(),
             surface,
+            extent,
             self.adapter.clone(),
             self.queues.clone(),
         )

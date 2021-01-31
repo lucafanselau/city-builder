@@ -1,24 +1,15 @@
-use bytemuck::Pod;
-
-use crate::{
-    command_encoder::CommandEncoder,
-    resource::{
-        buffer::{Buffer, BufferCopy, BufferDescriptor, BufferUsage, MemoryType},
-        glue::{DescriptorSet, GlueBottle},
-    },
+use crate::resource::{
+    glue::Glue,
+    pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext},
 };
 use crate::{
     context::GpuContext,
-    resource::glue::{Mixture, MixturePart},
-};
-use crate::{
-    graph::Graph,
     resource::{
-        glue::Glue,
-        pipeline::{GraphicsPipeline, GraphicsPipelineDescriptor, RenderContext},
+        buffer::{Buffer, BufferDescriptor},
+        glue::{DescriptorSet, GlueBottle, Mixture, MixturePart},
     },
 };
-use std::{borrow::Cow, mem::ManuallyDrop, sync::Arc};
+use std::{mem::ManuallyDrop, sync::Arc};
 
 #[derive(Debug)]
 pub struct GpuResources<Context: GpuContext> {

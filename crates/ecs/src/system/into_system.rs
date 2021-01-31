@@ -1,8 +1,8 @@
 // We are copying bevy a bit here (from the layout and abstraction idea)
-use crate::system::system::FunctionSystem;
+use crate::system::FunctionSystem;
 use crate::{
     resource::{ResourceCreator, ResourceQuery, Resources},
-    system::system::System,
+    system::System,
 };
 use hecs::{Query as HecsQuery, QueryBorrow, World};
 

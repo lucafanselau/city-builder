@@ -10,7 +10,7 @@ use gfx_hal::Backend;
 
 use std::iter;
 
-use crate::{compat::ToHalType, gfx_context::GfxContext};
+use crate::{compat::ToHalType, context::GfxContext};
 
 #[derive(Debug)]
 pub struct GfxCommand<B: Backend> {

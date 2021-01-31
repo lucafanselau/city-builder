@@ -1,17 +1,28 @@
 //! Provides an App struct, which basically ties all the loose ends together
+#![feature(trait_alias)]
 
+pub mod event;
 pub mod stages;
 
 pub use ecs::prelude::*;
 use ecs::system::MutatingSystem;
+use event::{Event, Events};
 use std::borrow::Cow;
+
+type Runner = Option<Box<dyn FnOnce(World, Resources, Scheduler)>>;
 
 pub struct App {
     world: World,
     resources: Resources,
     scheduler: Scheduler,
     plugins: Vec<Box<dyn FnOnce(&mut Self)>>,
-    runner: Option<Box<dyn FnOnce(World, Resources, Scheduler)>>,
+    runner: Runner,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl App {
@@ -19,7 +30,7 @@ impl App {
         let mut scheduler = Scheduler::new();
 
         for stage in stages::STAGES.iter() {
-            scheduler.add_stage(stage.clone());
+            scheduler.add_stage(*stage);
         }
 
         Self {
@@ -48,6 +59,17 @@ impl App {
 
     pub fn add_mut_system(&mut self, system: Box<dyn MutatingSystem>) {
         self.scheduler.add_mut_system(system)
+    }
+
+    pub fn add_event<T: Event>(&mut self) {
+        self.resources
+            .insert::<Events<T>>(Events::new())
+            .expect("[App] failed to insert event");
+
+        self.scheduler.add_system_to_stage(
+            stages::UPDATE_EVENTS,
+            Events::<T>::update_system.into_system(),
+        );
     }
 
     pub fn set_runner<Func>(&mut self, runner: Func)

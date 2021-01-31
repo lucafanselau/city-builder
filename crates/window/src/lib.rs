@@ -2,7 +2,7 @@ extern crate winit;
 
 use std::time::Instant;
 
-use app::App;
+use app::{event::Events, App};
 use ecs::{prelude::*, schedule::executor::ScheduleExecutor};
 
 use log::info;
@@ -16,6 +16,8 @@ use winit::{
     error::OsError,
     event::{Event, WindowEvent},
 };
+
+pub mod events;
 
 fn create_window<T: Into<String>, S: Into<Size>>(
     title: T,
@@ -41,6 +43,13 @@ pub struct WindowState {
 pub struct WindowTiming {
     pub elapsed: f32,
     pub delta_time: f32,
+}
+
+fn dispatch_event<T: app::event::Event>(r: &mut Resources, e: T) {
+    let mut events = r
+        .get_mut::<Events<T>>()
+        .expect("[Window] (dispatch_event) event is not registered");
+    events.send(e);
 }
 
 pub fn init_window(app: &mut App) {
@@ -72,6 +81,11 @@ pub fn init_window(app: &mut App) {
         event_loop
     };
 
+    {
+        // Register Events with the App
+        app.add_event::<events::WindowResize>();
+    }
+
     app.set_runner(|mut world, mut resources, mut scheduler| {
         let startup = Instant::now();
 
@@ -90,10 +104,13 @@ pub fn init_window(app: &mut App) {
                         }
                         WindowEvent::Resized(size) => {
                             log::info!("Resized: {:?}", size);
-                            let mut window = resources
-                                .get_mut::<WindowState>()
-                                .expect("[window] failed to get window state");
-                            window.size = size;
+                            {
+                                // let mut window = resources
+                                //     .get_mut::<WindowState>()
+                                //     .expect("[window] failed to get window state");
+                                // window.size = size;
+                            }
+                            dispatch_event(&mut resources, events::WindowResize(size));
                         }
                         _ => (),
                     }

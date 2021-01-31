@@ -42,7 +42,7 @@ fn build_attachment<B: Backend>(
     layouts: Range<Layout>,
 ) -> Attachment {
     let graph_attachment = attachments
-        .get(index.clone())
+        .get(index)
         .expect("[PassNodeBuilder] failed to find output attachment");
 
     Attachment {

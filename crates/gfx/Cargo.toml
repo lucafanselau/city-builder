@@ -10,6 +10,7 @@ edition = "2018"
 log = "0.4.11"
 app = { path = "../app" }
 render = { path = "../render" }
+window = { path = "../window" }
 generational-arena = "0.2.8"
 raw-window-handle = "0.3.3"
 gfx-hal = "0.6.0"

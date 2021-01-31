@@ -15,12 +15,13 @@ use gfx_hal::pso::{
 use gfx_hal::{
     buffer::SubRange,
     pso::{DescriptorSetLayoutBinding, ShaderStageFlags},
+    window::Extent2D as HalExtent2D,
 };
 use gfx_hal::{
     command::{BufferCopy as HalBufferCopy, ClearColor, ClearDepthStencil, ClearValue},
     pso::DescriptorType,
 };
-use render::resource::frame::{Clear, Extent3D};
+use render::resource::frame::{Clear, Extent2D, Extent3D};
 use render::resource::pipeline::{
     AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
     Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate,
@@ -352,6 +353,17 @@ impl ToHalType for SubpassDependency {
             stages: self.stages.start.convert()..self.stages.end.convert(),
             accesses: self.accesses.start.convert()..self.accesses.end.convert(),
             flags: Dependencies::empty(),
+        }
+    }
+}
+
+impl ToHalType for Extent2D {
+    type Target = HalExtent2D;
+
+    fn convert(self) -> Self::Target {
+        HalExtent2D {
+            width: self.width,
+            height: self.height,
         }
     }
 }

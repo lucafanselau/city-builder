@@ -1,7 +1,7 @@
 use crate::context::GpuContext;
 use crate::resource::render_pass::SubpassId;
 use crate::util::format::TextureFormat;
-use std::borrow::{Cow};
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, Range};
@@ -65,6 +65,16 @@ pub struct Rasterizer {
     pub culling: Culling, // We might add fields later but for now this should be sufficent
 }
 
+impl Rasterizer {
+    pub const FILL: Self = Rasterizer {
+        polygon_mode: PolygonMode::Fill,
+        culling: Culling {
+            winding: Winding::Clockwise,
+            cull_face: CullFace::None,
+        },
+    };
+}
+
 #[derive(Debug, Clone)]
 pub enum VertexInputRate {
     Vertex,
@@ -76,6 +86,16 @@ pub struct VertexBufferDescriptor {
     pub binding: u32,
     pub stride: u32,
     pub rate: VertexInputRate,
+}
+
+impl VertexBufferDescriptor {
+    pub fn new(binding: u32, stride: u32, rate: VertexInputRate) -> Self {
+        Self {
+            binding,
+            stride,
+            rate,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +112,17 @@ pub struct AttributeDescriptor {
     pub binding: u32,
     pub offset: u32,
     pub format: VertexAttributeFormat,
+}
+
+impl AttributeDescriptor {
+    pub fn new(location: u32, binding: u32, offset: u32, format: VertexAttributeFormat) -> Self {
+        Self {
+            location,
+            binding,
+            offset,
+            format,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -199,9 +230,7 @@ pub enum PipelineStage {
 #[derive(Debug)]
 pub struct GraphicsPipelineDescriptor<'a, Context: GpuContext> {
     pub name: Cow<'static, str>,
-
     pub mixtures: Vec<&'a Mixture<Context>>,
-
     pub shaders: PipelineShaders<Context>,
     /// TODO: Render Pass layout for this Pipeline
     pub rasterizer: Rasterizer,

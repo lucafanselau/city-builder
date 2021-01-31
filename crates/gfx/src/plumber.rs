@@ -1,5 +1,5 @@
 use crate::compat::ToHalType;
-use crate::gfx_context::GfxContext;
+use crate::context::GfxContext;
 use gfx_hal::pass::Subpass;
 use gfx_hal::pso::{
     AttributeDesc, BakedStates, BasePipeline, BlendDesc, BlendState, ColorBlendDesc, ColorMask,
@@ -133,6 +133,7 @@ impl<B: Backend> Plumber<B> {
         };
 
         let layout = unsafe {
+            let name = desc.name.clone();
             let set_layouts: Vec<&B::DescriptorSetLayout> = desc
                 .mixtures
                 .into_iter()
@@ -143,13 +144,12 @@ impl<B: Backend> Plumber<B> {
                     set_layouts,
                     iter::empty::<(ShaderStageFlags, std::ops::Range<u32>)>(),
                 )
-                .expect(
-                    format!(
+                .unwrap_or_else(|_| {
+                    panic!(
                         "[Plumber] failed to create pipeline layout for pipeline: {}",
-                        desc.name
+                        name
                     )
-                    .as_str(),
-                )
+                })
         };
 
         // The subpass

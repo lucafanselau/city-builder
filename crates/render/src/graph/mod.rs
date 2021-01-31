@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
 
 use app::{Resources, World};
 
@@ -17,6 +17,7 @@ pub mod attachment;
 pub mod node;
 pub mod nodes;
 
+// TODO: Send + Sync (mainly pass callbacks are destroying that currently)
 pub trait Graph {
     type Context: GpuContext;
     type AttachmentIndex: Clone;

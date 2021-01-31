@@ -28,6 +28,8 @@ pub struct AllocationIndex {
 
 const BLOCK_SIZE: u64 = 20;
 
+type MemoryPages<B> = RwLock<HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>>;
+
 /// Heapy will be our own little memory allocation utility
 #[derive(Debug, Default)]
 pub struct Heapy<B: Backend> {
@@ -35,9 +37,11 @@ pub struct Heapy<B: Backend> {
     // And our memory pages
     // allocations: Arena<Allocation>,
     // TODO: This is horrible, we need a better multi-threading ready model here
-    pages: RwLock<HashMap<MemoryType, (PageInfo, Arena<MemoryPage<B>>)>>,
+    pages: MemoryPages<B>,
     min_alignment: AtomicU64,
 }
+
+impl<B: Backend> Heapy<B> {}
 
 impl<B: Backend> Heapy<B> {
     pub(crate) fn new(device: Arc<B::Device>, physical_device: &B::PhysicalDevice) -> Self {
@@ -101,15 +105,14 @@ impl<B: Backend> Heapy<B> {
         let (page, offset) = unsafe {
             let mut result = None;
             for (id, p) in pages.iter_mut() {
-                match p.allocations.try_alloc(size) {
-                    Ok(offset) => {
-                        result = Some((id, offset));
-                        break;
-                    }
-                    _ => (),
+                if let Ok(offset) = p.allocations.try_alloc(size) {
+                    result = Some((id, offset));
+                    break;
                 }
             }
-            if result.is_none() {
+            if let Some(result) = result {
+                result
+            } else {
                 // We didn't find a suitable memory_page so create a new one
                 let mut page = MemoryPage::<B>::new(
                     &self.device,
@@ -120,8 +123,6 @@ impl<B: Backend> Heapy<B> {
                 let offset = page.allocations.try_alloc(size).unwrap();
                 let page_idx = pages.insert(page);
                 (page_idx, offset)
-            } else {
-                result.unwrap()
             }
         };
 
@@ -169,7 +170,7 @@ impl<B: Backend> Heapy<B> {
 
             Some(())
         })();
-        if let None = result {
+        if result.is_none() {
             panic!("[Heapy] (deallocate) failed, probably because \"at\" was invalid")
         }
     }
@@ -227,13 +228,7 @@ impl<B: Backend> Heapy<B> {
             .iter()
             .enumerate()
             .find(|(_id, mem_type)| mem_type.properties.contains(props))
-            .map(|(id, mem_type)| {
-                (
-                    MemoryTypeId(id),
-                    mem_type.heap_index,
-                    mem_type.properties.clone(),
-                )
-            });
+            .map(|(id, mem_type)| (MemoryTypeId(id), mem_type.heap_index, mem_type.properties));
 
         match mem_info {
             Some((id, heap_index, properties)) => PageInfo {

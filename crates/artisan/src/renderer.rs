@@ -1,28 +1,22 @@
-use std::{
-    cell::{Ref, RefMut},
-    ops::Deref,
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc, time::Instant};
 
-use app::{App, IntoFunctionSystem, IntoMutatingSystem, Resources, World};
+use app::{App, IntoMutatingSystem, Resources, World};
 use bytemuck::{Pod, Zeroable};
-use gfx::gfx_context::ContextBuilder as GfxContextBuilder;
+use gfx::context::ContextBuilder as GfxContextBuilder;
 use render::{
     context::GpuBuilder,
     graph::{node::Node, nodes::callbacks::FrameData, Graph},
     prelude::*,
     resource::{
+        frame::Extent2D,
         pipeline::{
-            AttributeDescriptor, CullFace, Culling, GraphicsPipeline, PipelineShaders,
-            PipelineState, PipelineStates, PolygonMode, Primitive, Rasterizer,
-            RenderContext as PipelineRenderContext, VertexAttributeFormat, VertexBufferDescriptor,
-            VertexInputRate, Winding,
+            AttributeDescriptor, GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates,
+            Primitive, Rasterizer, RenderContext as PipelineRenderContext, VertexAttributeFormat,
+            VertexBufferDescriptor, VertexInputRate,
         },
         render_pass::{LoadOp, StoreOp},
     },
 };
-use window::{WindowState, WindowTiming};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
@@ -37,7 +31,7 @@ struct Offset {
 }
 
 pub type ActiveContextBuilder = GfxContextBuilder;
-pub type ActiveContext = <GfxContextBuilder as GpuBuilder>::Context;
+pub type ActiveContext = <ActiveContextBuilder as GpuBuilder>::Context;
 
 // struct RendererState {
 //     vertex_buffer: Buffer<GfxContext>,
@@ -53,13 +47,25 @@ pub fn init(app: &mut App) {
             .expect("[Artisan] failed to load window");
 
         let mut ctx_builder = GfxContextBuilder::new();
-        let surface = ctx_builder.create_surface(&window_state.window);
+        let window_size = window_state.window.inner_size();
+        let surface = ctx_builder.create_surface(
+            &window_state.window,
+            Extent2D {
+                width: window_size.width,
+                height: window_size.height,
+            },
+        );
         let ctx = Arc::new(ctx_builder.build());
         (ctx, surface)
     };
     let resources = Arc::new(GpuResources::new(ctx.clone()));
 
-    let graph = {
+    // Timer
+    app.get_resources()
+        .insert(Instant::now())
+        .expect("[Artisan] failed to insert Instant resource");
+
+    {
         let mut graph = ctx.create_graph(surface);
 
         let vertices = [
@@ -144,24 +150,18 @@ pub fn init(app: &mut App) {
                         fragment: fragment_code.clone(),
                         geometry: None,
                     },
-                    rasterizer: Rasterizer {
-                        polygon_mode: PolygonMode::Fill,
-                        culling: Culling {
-                            winding: Winding::Clockwise,
-                            cull_face: CullFace::None,
-                        },
-                    },
-                    vertex_buffers: vec![VertexBufferDescriptor {
-                        binding: 0,
-                        stride: vertex_size as u32,
-                        rate: VertexInputRate::Vertex,
-                    }],
-                    attributes: vec![AttributeDescriptor {
-                        location: 0,
-                        binding: 0,
-                        offset: 0,
-                        format: VertexAttributeFormat::Vec4,
-                    }],
+                    rasterizer: Rasterizer::FILL,
+                    vertex_buffers: vec![VertexBufferDescriptor::new(
+                        0,
+                        vertex_size as _,
+                        VertexInputRate::Vertex,
+                    )],
+                    attributes: vec![AttributeDescriptor::new(
+                        0,
+                        0,
+                        0,
+                        VertexAttributeFormat::Vec4,
+                    )],
                     primitive: Primitive::TriangleList,
                     blend_targets: vec![true],
                     depth: None,
@@ -175,12 +175,22 @@ pub fn init(app: &mut App) {
                     .create_graphics_pipeline(desc, PipelineRenderContext::RenderPass((rp, 0)));
                 Box::new(pipeline)
             }));
-            builder.callback(Box::new(move |frame, p, _w, _r| {
+            builder.callback(Box::new(move |frame, p, _w, resources| {
                 let FrameData {
                     cmd,
                     frame_index,
                     viewport,
                 } = frame;
+
+                let elapsed = resources
+                    .get::<Instant>()
+                    .expect("[Artisan] failed to get timeing resource")
+                    .elapsed()
+                    .as_secs_f32();
+                let offset = Offset {
+                    offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
+                };
+                offset_buffer.write(offset);
 
                 vertex_buffer.frame(frame_index);
                 offset_buffer.frame(frame_index);

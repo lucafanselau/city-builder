@@ -5,11 +5,11 @@ use gfx_hal::{
 };
 use log::*;
 use parking_lot::Mutex;
-use render::{context::GpuBuilder, prelude::GpuContext};
+use render::{context::GpuBuilder, prelude::GpuContext, resource::frame::Extent2D};
 use std::sync::Arc;
 
 use crate::{
-    gfx_context::{GfxContext, Queues},
+    context::{GfxContext, Queues},
     heapy::Heapy,
     plumber::Plumber,
     pool::Pool,
@@ -36,12 +36,14 @@ impl<B: Backend> GpuBuilder for GfxBuilder<B> {
     fn create_surface<W: raw_window_handle::HasRawWindowHandle>(
         &mut self,
         window: &W,
+        extent: Extent2D,
     ) -> <Self::Context as GpuContext>::SurfaceHandle {
         let surface = Arc::new(Mutex::new(unsafe {
             self.instance
                 .create_surface(window)
                 .expect("[GfxBuilder] failed to create surface")
         }));
+        let surface = (surface, extent);
         self.surfaces.push(surface.clone());
         surface
     }
@@ -64,7 +66,9 @@ impl<B: Backend> GpuBuilder for GfxBuilder<B> {
             .filter(|a| {
                 a.queue_families.iter().any(|qf| {
                     qf.queue_type().supports_graphics()
-                        && surfaces.iter().all(|s| s.lock().supports_queue_family(qf))
+                        && surfaces
+                            .iter()
+                            .all(|(s, _e)| s.lock().supports_queue_family(qf))
                 })
             })
             .map(|a| {
@@ -98,7 +102,7 @@ impl<B: Backend> GpuBuilder for GfxBuilder<B> {
                 .find(|family| {
                     surfaces
                         .iter()
-                        .all(|s| s.lock().supports_queue_family(family))
+                        .all(|(s, _e)| s.lock().supports_queue_family(family))
                         && family.queue_type().supports_graphics()
                 })
                 .expect("couldn't find graphics queue_family");

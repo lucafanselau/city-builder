@@ -1,8 +1,8 @@
 use crate::resource::{
+    frame::Extent2D,
     glue::Mixture,
     pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
 };
-use crate::util::format::TextureFormat;
 use crate::{
     command_encoder::CommandEncoder,
     resource::{buffer::BufferDescriptor, glue::MixturePart},
@@ -24,6 +24,7 @@ pub trait GpuBuilder {
     fn create_surface<W: HasRawWindowHandle>(
         &mut self,
         window: &W,
+        extent: Extent2D,
     ) -> <Self::Context as GpuContext>::SurfaceHandle;
 
     fn build(self) -> Self::Context;

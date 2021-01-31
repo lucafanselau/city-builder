@@ -26,6 +26,12 @@ pub struct Scheduler {
     pub(crate) order: Vec<Cow<'static, str>>,
 }
 
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scheduler {
     pub fn new() -> Self {
         Self {
@@ -65,14 +71,12 @@ impl Scheduler {
         let anchor = anchor.into();
         if self.order.contains(&name) {
             Err(InsertStageError::StageExists)
+        } else if let Some(index) = self.order.iter().position(|s| s == &anchor) {
+            self.order.insert(index + offset, name.clone());
+            self.stages.insert(name, Default::default());
+            Ok(())
         } else {
-            if let Some(index) = self.order.iter().position(|s| s == &anchor) {
-                self.order.insert(index + offset, name.clone());
-                self.stages.insert(name, Default::default());
-                Ok(())
-            } else {
-                Err(InsertStageError::AnchorStageMissing)
-            }
+            Err(InsertStageError::AnchorStageMissing)
         }
     }
 

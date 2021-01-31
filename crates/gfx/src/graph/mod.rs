@@ -20,7 +20,7 @@ use gfx_hal::{
     pool::{CommandPool, CommandPoolCreateFlags},
     prelude::CommandQueue,
     queue::Submission,
-    window::{Extent2D, PresentationSurface, Surface, SurfaceCapabilities, SwapchainConfig},
+    window::{PresentationSurface, Surface, SurfaceCapabilities, SwapchainConfig},
     Backend,
 };
 use parking_lot::{Mutex, MutexGuard, RwLock};
@@ -28,16 +28,16 @@ use render::{
     graph::{attachment::GraphAttachment, node::Node, nodes::callbacks::FrameData, Graph},
     prelude::CommandEncoder,
     resource::{
-        frame::Clear,
+        frame::{Clear, Extent2D},
         pipeline::{Rect, Viewport},
     },
     util::format::TextureFormat,
 };
 
 use crate::{
+    command::GfxCommand,
     compat::ToHalType,
-    gfx_command::GfxCommand,
-    gfx_context::{GfxContext, Queues},
+    context::{GfxContext, Queues},
 };
 
 pub mod attachment;
@@ -82,7 +82,7 @@ pub struct GfxGraph<B: Backend> {
 
     // Rendering related stuff
     surface_format: TextureFormat,
-    surface_extent: RwLock<Option<Extent2D>>,
+    surface_extent: RwLock<Extent2D>,
     queues: Arc<Queues<B>>,
     should_configure_swapchain: AtomicBool,
 
@@ -91,7 +91,7 @@ pub struct GfxGraph<B: Backend> {
     frames_in_flight: u32,
     frames: Vec<ManuallyDrop<Mutex<FrameSynchronization<B>>>>,
 
-    // Pooly
+    // Pool
     command_pool: ManuallyDrop<Mutex<B::CommandPool>>,
 }
 
@@ -101,6 +101,7 @@ impl<B: Backend> GfxGraph<B> {
     pub(crate) fn new(
         device: Arc<B::Device>,
         surface: Arc<Mutex<B::Surface>>,
+        extent: Extent2D,
         adapter: Arc<Adapter<B>>,
         queues: Arc<Queues<B>>,
     ) -> Self {
@@ -148,7 +149,7 @@ impl<B: Backend> GfxGraph<B> {
             attachments: Arena::new(),
             nodes: Arena::new(),
             surface_format,
-            surface_extent: RwLock::new(None),
+            surface_extent: RwLock::new(extent),
             queues,
             should_configure_swapchain: AtomicBool::from(true),
             current_frame: RwLock::new((0, FrameStatus::Inactive)),
@@ -190,21 +191,18 @@ impl<B: Backend> GfxGraph<B> {
                 let mut swapchain_config = SwapchainConfig::from_caps(
                     &caps,
                     self.surface_format.clone().convert(),
-                    Extent2D {
-                        width: 1600,
-                        height: 900,
-                    },
+                    self.surface_extent.read().clone().convert(),
                 );
                 // This seems to fix some fullscreen slowdown on macOS.
                 if caps.image_count.contains(&3) {
                     swapchain_config.image_count = 3;
                 }
 
-                {
-                    *self.surface_extent.write() = Some(swapchain_config.extent);
-                }
+                // {
+                //     *self.surface_extent.write() = Some(swapchain_config.extent);
+                // }
 
-                log::warn!("Swapchain Config: {:#?}", swapchain_config);
+                // log::warn!("Swapchain Config: {:#?}", swapchain_config);
 
                 unsafe { surface.configure_swapchain(&self.device, swapchain_config)? };
             };
@@ -298,6 +296,23 @@ impl<B: Backend> Graph for GfxGraph<B> {
     }
 
     fn execute(&mut self, world: &World, resources: &Resources) {
+        {
+            // Check for resize events
+            let resize_events = resources
+                .get::<app::event::Events<window::events::WindowResize>>()
+                .expect("[GfxGraph] (execute) failed to get resize event");
+
+            // Get the last window extent
+            if let Some(&window::events::WindowResize(new_extent)) = resize_events.iter().last() {
+                *self.surface_extent.write() = Extent2D {
+                    width: new_extent.width,
+                    height: new_extent.height,
+                };
+                self.should_configure_swapchain
+                    .store(true, Ordering::Relaxed);
+            }
+        }
+
         self.configure_swapchain()
             .expect("[GfxGraph] failed to configure swapchain");
 
@@ -322,11 +337,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
 
             // Command Encoder Abstraction
             let mut gfx_command = GfxCommand::<B>::new(command);
-            let extent = self
-                .surface_extent
-                .read()
-                .clone()
-                .expect("[GfxGraph] No Surface Extent");
+            let extent = self.surface_extent.read().clone();
             let extent3d = Extent {
                 width: extent.width,
                 height: extent.height,
@@ -335,52 +346,52 @@ impl<B: Backend> Graph for GfxGraph<B> {
 
             // TODO: Execute all passes
             for (_node_index, node) in self.nodes.iter_mut() {
-                if let GfxNode::PassNode(node) = node {
-                    let framebuffer = unsafe {
-                        let mut attachments = node.graph_node.output_attachments.clone();
-                        attachments.extend(node.graph_node.input_attachments.clone());
-                        if let Some(a) = &node.graph_node.depth_attachment {
-                            attachments.push(a.clone())
-                        };
-                        let attachments = attachments.iter().map(|a| match a.index {
-                            AttachmentIndex::Backbuffer => image.borrow(),
-                            AttachmentIndex::Custom(_) => {
-                                unimplemented!()
-                            }
-                        });
-                        self.device
-                            .create_framebuffer(&node.render_pass, attachments, extent3d)
-                            .expect("[GfxGraph] failed to create viewport")
+                // TODO: Expand to diffrent nodes
+                let GfxNode::PassNode(node) = node;
+                let framebuffer = unsafe {
+                    let mut attachments = node.graph_node.output_attachments.clone();
+                    attachments.extend(node.graph_node.input_attachments.clone());
+                    if let Some(a) = &node.graph_node.depth_attachment {
+                        attachments.push(a.clone())
                     };
+                    let attachments = attachments.iter().map(|a| match a.index {
+                        AttachmentIndex::Backbuffer => image.borrow(),
+                        AttachmentIndex::Custom(_) => {
+                            unimplemented!()
+                        }
+                    });
+                    self.device
+                        .create_framebuffer(&node.render_pass, attachments, extent3d)
+                        .expect("[GfxGraph] failed to create viewport")
+                };
 
-                    let viewport = Viewport {
-                        rect: Rect {
-                            x: 0,
-                            y: 0,
-                            width: extent.width as i16,
-                            height: extent.height as i16,
-                        },
-                        depth: 0.0..1.0,
-                    };
+                let viewport = Viewport {
+                    rect: Rect {
+                        x: 0,
+                        y: 0,
+                        width: extent.width as i16,
+                        height: extent.height as i16,
+                    },
+                    depth: 0.0..1.0,
+                };
 
-                    gfx_command.begin_render_pass(
-                        &node.render_pass,
-                        &framebuffer,
-                        viewport.clone().rect,
-                        // TODO: Clear Values
-                        vec![Clear::Color(0.2, 0.5, 0.1, 1.0)],
-                    );
+                gfx_command.begin_render_pass(
+                    &node.render_pass,
+                    &framebuffer,
+                    viewport.clone().rect,
+                    // TODO: Clear Values
+                    vec![Clear::Color(0.2, 0.5, 0.1, 1.0)],
+                );
 
-                    // Execute Callback
-                    let frame_data = FrameData {
-                        cmd: &mut gfx_command,
-                        frame_index: index,
-                        viewport: viewport.clone(),
-                    };
-                    node.graph_node.callbacks.run(frame_data, world, resources);
-                    // and end render pass
-                    gfx_command.end_render_pass()
-                }
+                // Execute Callback
+                let frame_data = FrameData {
+                    cmd: &mut gfx_command,
+                    frame_index: index,
+                    viewport: viewport.clone(),
+                };
+                node.graph_node.callbacks.run(frame_data, world, resources);
+                // and end render pass
+                gfx_command.end_render_pass()
             }
             // self.nodes.iter().
             // cb(&mut gfx_command);
@@ -430,9 +441,9 @@ impl<B: Backend> Graph for GfxGraph<B> {
                 Some(&this_frame.rendering_complete),
             );
 
-            if let Err(e) = result {
-                log::warn!("Recovarable Error happened");
-                log::warn!("{:#?}", e);
+            if let Err(_e) = result {
+                // log::warn!("Recovarable Error happened");
+                // log::warn!("{:#?}", e);
                 self.should_configure_swapchain
                     .store(true, Ordering::Relaxed);
             }
