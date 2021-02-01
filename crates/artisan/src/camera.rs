@@ -1,8 +1,9 @@
 use app::{App, IntoFunctionSystem, Timing};
 use bytemuck::{Pod, Zeroable};
 use std::cell::{Ref, RefMut};
+use window::{events::VirtualKeyCode, input::Input};
 
-///
+/// The struct that can be sent to shaders
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
 #[repr(C)]
 pub struct CameraBuffer {
@@ -28,10 +29,19 @@ impl Camera {
     }
 }
 
-fn camera_system(mut camera: RefMut<Camera>, timing: Ref<Timing>) {
-    // Randomly move along plane a bit
-    let elapsed = timing.total_elapsed();
-    camera.eye = glam::vec3(elapsed.sin() * 0.3, elapsed.sin() * 0.3, 1.0);
+fn camera_system(mut camera: RefMut<Camera>, input: Ref<Input>, timing: Ref<Timing>) {
+    let mut dir = glam::vec2(0.0, 0.0);
+    let mut calc_dir = |key: VirtualKeyCode, d: glam::Vec2| {
+        if input.is_pressed(key) {
+            dir += d
+        }
+    };
+    calc_dir(VirtualKeyCode::W, glam::vec2(0.0, 1.0));
+    calc_dir(VirtualKeyCode::S, glam::vec2(0.0, -1.0));
+    calc_dir(VirtualKeyCode::A, glam::vec2(-1.0, 0.0));
+    calc_dir(VirtualKeyCode::D, glam::vec2(1.0, 0.0));
+
+    camera.eye += (0.2 * timing.dt * dir).extend(0.0);
 }
 
 pub(crate) fn init(app: &mut App) {

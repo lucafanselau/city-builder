@@ -1,12 +1,7 @@
-extern crate winit;
-
-use std::time::Instant;
-
 use app::{event::Events, App};
 use ecs::{prelude::*, schedule::executor::ScheduleExecutor};
 
 use log::info;
-use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 use winit::{
     dpi::{PhysicalSize, Size},
@@ -16,8 +11,10 @@ use winit::{
     error::OsError,
     event::{Event, WindowEvent},
 };
+use winit::{event::KeyboardInput, event_loop::EventLoop};
 
 pub mod events;
+pub mod input;
 
 fn create_window<T: Into<String>, S: Into<Size>>(
     title: T,
@@ -37,12 +34,6 @@ pub struct WindowState {
     pub window: Window,
     // pub event_loop: EventLoop<()>,
     pub size: PhysicalSize<u32>,
-}
-
-#[derive(Debug)]
-pub struct WindowTiming {
-    pub elapsed: f32,
-    pub delta_time: f32,
 }
 
 fn dispatch_event<T: app::event::Event>(r: &mut Resources, e: T) {
@@ -71,24 +62,20 @@ pub fn init_window(app: &mut App) {
             .insert(state)
             .expect("[Window] failed to insert window state");
 
-        resources
-            .insert(WindowTiming {
-                elapsed: 0f32,
-                delta_time: 0f32,
-            })
-            .expect("[Window] failed to insert initial window timing");
-
         event_loop
     };
 
     {
         // Register Events with the App
         app.add_event::<events::WindowResize>();
+        app.add_event::<events::CursorMoved>();
+        app.add_event::<events::KeyboardInput>();
+
+        // Initialize Submodules
+        input::init(app);
     }
 
     app.set_runner(|mut world, mut resources, mut scheduler| {
-        let startup = Instant::now();
-
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.
@@ -98,35 +85,33 @@ pub fn init_window(app: &mut App) {
                 Event::WindowEvent { event, .. } => {
                     // log::info!("{:#?}", event);
                     match event {
+                        WindowEvent::CursorMoved { position, .. } => {
+                            let position = glam::vec2(position.x as _, position.y as _);
+                            dispatch_event(&mut resources, events::CursorMoved(position));
+                        }
+                        WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    virtual_keycode: Some(key),
+                                    state,
+                                    ..
+                                },
+                            ..
+                        } => dispatch_event(&mut resources, events::KeyboardInput { key, state }),
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                             info!("The close button was pressed; stopping");
                         }
                         WindowEvent::Resized(size) => {
                             log::info!("Resized: {:?}", size);
-                            {
-                                // let mut window = resources
-                                //     .get_mut::<WindowState>()
-                                //     .expect("[window] failed to get window state");
-                                // window.size = size;
-                            }
                             dispatch_event(&mut resources, events::WindowResize(size));
                         }
                         _ => (),
                     }
                 }
                 Event::MainEventsCleared => {
-                    {
-                        let elapsed = startup.elapsed().as_secs_f32();
-                        let mut timing = resources.get_mut::<WindowTiming>().unwrap();
-                        let delta_time = elapsed - timing.elapsed;
-                        timing.delta_time = delta_time;
-                        timing.elapsed = elapsed;
-                    }
-                    {
-                        let window_state = resources.get::<WindowState>().unwrap();
-                        window_state.window.request_redraw();
-                    }
+                    let window_state = resources.get::<WindowState>().unwrap();
+                    window_state.window.request_redraw();
                 }
                 Event::RedrawRequested(_) => {
                     // This dumb af

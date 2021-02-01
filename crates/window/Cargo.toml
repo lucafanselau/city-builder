@@ -11,3 +11,4 @@ log = "0.4.11"
 ecs = { path = "../ecs" }
 app = { path = "../app" }
 winit = "0.24"
+glam = { version = "0.12.0", features = ["bytemuck"] }
