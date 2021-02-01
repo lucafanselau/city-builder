@@ -83,7 +83,7 @@ fn build_pass_node<B: Backend>(
             samples: 1u8,
             ops: AttachmentOps::new(a.load.clone().convert(), a.store.clone().convert()),
             stencil_ops: AttachmentOps::DONT_CARE,
-            layouts: Layout::Undefined..Layout::ShaderReadOnlyOptimal,
+            layouts: Layout::Undefined..Layout::Present,
         },
     }));
 

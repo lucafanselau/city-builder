@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.11"
+core = { path = "../core" }
 app = { path = "../app" }
 render = { path = "../render" }
 window = { path = "../window" }

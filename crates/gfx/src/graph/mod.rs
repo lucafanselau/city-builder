@@ -189,6 +189,8 @@ impl<B: Backend> GfxGraph<B> {
                 if caps.image_count.contains(&3) {
                     swapchain_config.image_count = 3;
                 }
+                log::info!("Available Image Counts: {:?}", caps.image_count);
+                log::info!("Image Count {}", swapchain_config.image_count);
 
                 // log::info!("swapchain mode: {:?}", swapchain_config.present_mode);
                 swapchain_config.present_mode = PresentMode::IMMEDIATE;
@@ -282,6 +284,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
     }
 
     fn execute(&mut self, world: &World, resources: &Resources) {
+        let mut p = core::profiler::Profiler::new("Execute Graph");
+
         {
             // Check for resize events
             let resize_events = resources
@@ -299,8 +303,12 @@ impl<B: Backend> Graph for GfxGraph<B> {
             }
         }
 
+        p.step("Events");
+
         self.configure_swapchain()
             .expect("[GfxGraph] failed to configure swapchain");
+
+        p.step("Configure Swapchain");
 
         let (index, image) = match self.new_frame() {
             Ok(i) => i,
@@ -311,6 +319,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
                 self.new_frame().unwrap()
             }
         };
+
+        p.step("New Frame");
 
         let command = {
             // create the command buffer
@@ -390,6 +400,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
             command
         };
 
+        p.step("Build Command Buffer");
+
         let frame_idx = {
             let mut current_frame = self.current_frame.write();
             match current_frame.1 {
@@ -408,6 +420,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
         let mut this_frame = self.frames.get(frame_idx as usize).unwrap().lock();
         let mut graphics_queue = self.queues.graphics.lock();
 
+        p.step("Acquire Locks");
+
         unsafe {
             let submission = Submission {
                 command_buffers: vec![&command],
@@ -417,15 +431,20 @@ impl<B: Backend> Graph for GfxGraph<B> {
             graphics_queue.submit(submission, Some(&this_frame.submission_fence));
         }
 
+        p.step("Submisson");
+
         this_frame.in_use_command = Some(command);
 
         unsafe {
+            let surface = &mut self.surface.lock();
+
+            p.step("Acquire Surface");
+
             // NOTE(luca): Currently we do not think about suboptimal swapchains
-            let result = graphics_queue.present(
-                &mut self.surface.lock(),
-                image,
-                Some(&this_frame.rendering_complete),
-            );
+            let result =
+                graphics_queue.present(surface, image, Some(&this_frame.rendering_complete));
+
+            p.step("Present Call");
 
             if let Err(_e) = result {
                 // log::warn!("Recovarable Error happened");
@@ -434,6 +453,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     .store(true, Ordering::Relaxed);
             }
         }
+        p.step("Present");
+        // p.finish();
     }
 
     fn get_surface_format(&self) -> TextureFormat {
@@ -453,3 +474,10 @@ impl<B: Backend> Graph for GfxGraph<B> {
 }
 
 // TODO: Drop the custom nodes
+impl<B: Backend> Drop for GfxGraph<B> {
+    fn drop(&mut self) {
+        self.device
+            .wait_idle()
+            .expect("[Graph] failed to wait_idle");
+    }
+}
