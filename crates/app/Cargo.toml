@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 ecs = { path = "../ecs" }
+log = "0.4.14"

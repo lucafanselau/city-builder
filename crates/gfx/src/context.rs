@@ -108,6 +108,10 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         self.heapy.write(&buffer.1, bytemuck::bytes_of(data));
     }
 
+    unsafe fn write_to_buffer_raw(&self, buffer: &Self::BufferHandle, data: &[u8]) {
+        self.heapy.write(&buffer.1, data);
+    }
+
     fn drop_buffer(&self, buffer: Self::BufferHandle) {
         unsafe {
             self.device.destroy_buffer(buffer.0);
@@ -166,13 +170,13 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         }
     }
 
-    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode {
-        self.plumber.compile_shader(source)
-    }
-
     // fn get_surface_format(&self) -> TextureFormat {
     //     self.swapper.get_surface_format()
     // }
+
+    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode {
+        self.plumber.compile_shader(source)
+    }
 
     fn create_framebuffer<I>(
         &self,
@@ -207,20 +211,12 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     fn drop_descriptor_layout(&self, handle: Self::DescriptorLayout) {
         self.pool.drop_layout(handle)
     }
-
     fn create_descriptor_set(&self, layout: &Mixture<Self>) -> Self::DescriptorSet {
         self.pool.allocate_set(layout)
     }
+
     fn drop_descriptor_set(&self, handle: Self::DescriptorSet) {
         self.pool.free_set(handle)
-    }
-
-    fn update_descriptor_set(
-        &self,
-        handle: &Self::DescriptorSet,
-        writes: Vec<DescriptorWrite<Self>>,
-    ) {
-        self.pool.write_set(handle, writes)
     }
 
     // fn single_shot_command(&self, should_wait: bool, cb: impl FnOnce(&mut Self::CommandEncoder)) {
@@ -257,6 +253,14 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     // fn swapchain_image_count(&self) -> usize {
     //     self.swapper.get_frames_in_flight()
     // }
+
+    fn update_descriptor_set(
+        &self,
+        handle: &Self::DescriptorSet,
+        writes: Vec<DescriptorWrite<Self>>,
+    ) {
+        self.pool.write_set(handle, writes)
+    }
 
     fn wait_idle(&self) {
         self.device.wait_idle().expect("failed to wait idle");

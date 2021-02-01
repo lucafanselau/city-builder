@@ -1,3 +1,5 @@
+use std::{ops::Deref, time::Instant};
+
 use crate::{resource::Resources, schedule::scheduler::Scheduler};
 use hecs::World;
 
@@ -14,6 +16,23 @@ pub struct SequentialExecutor;
 
 impl ScheduleExecutor for SequentialExecutor {
     fn execute(schedule: &mut Scheduler, world: &mut World, resources: &mut Resources) {
+        // #[derive(Debug)]
+        // struct StageInfo {
+        //     name: String,
+        //     elapsed: f32,
+        //     percentage: f32,
+        // }
+        // let mut profile_data = Vec::new();
+        // let mut time = Instant::now();
+        // let mut add_data = |a: &str| {
+        //     profile_data.push(StageInfo {
+        //         name: String::from(a),
+        //         elapsed: time.elapsed().as_secs_f32(),
+        //         percentage: 0.0,
+        //     });
+        //     time = Instant::now();
+        // };
+
         for stage in schedule.order.iter() {
             // for now we will just execute each stage sequentially on one thread
             if let Some(systems) = schedule.stages.get(stage) {
@@ -22,11 +41,25 @@ impl ScheduleExecutor for SequentialExecutor {
                     system.run(world, resources);
                 }
             }
+            //  add_data(stage);
         }
         // at the end we will execute the thread local ones
         for system in schedule.mut_systems.iter_mut() {
             system.run(world, resources)
         }
+        // add_data("MUT_SYSTEMS");
+
+        // {
+        //     // Figure out percentage
+        //     let total = profile_data.iter().fold(0.0f32, |acc, c| acc + c.elapsed);
+        //     profile_data
+        //         .iter_mut()
+        //         .for_each(|d| d.percentage = (d.elapsed * 100f32) / total);
+        // }
+
+        // log::debug!("FRAME PROFILE");
+        // profile_data.iter().for_each(|d| log::debug!("{:?}", d));
+        // log::debug!("END PROFILE");
     }
 }
 

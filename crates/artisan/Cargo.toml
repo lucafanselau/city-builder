@@ -15,3 +15,6 @@ window = { path = "../window" }
 raw-window-handle = "0.3.3"
 bytemuck = { version =  "1.4.1", features = ["derive"] }
 downcast-rs = "1.2.0"
+log = "0.4.14"
+uuid = { version = "0.8.2", features = ["v4"] }
+glam = { version = "0.12.0", features = ["bytemuck"] }

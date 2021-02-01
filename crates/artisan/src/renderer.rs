@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc, time::Instant};
+use std::{any::TypeId, path::Path, sync::Arc, time::Instant};
 
 use app::{App, IntoMutatingSystem, Resources, World};
 use bytemuck::{Pod, Zeroable};
@@ -10,19 +10,18 @@ use render::{
     resource::{
         frame::Extent2D,
         pipeline::{
-            AttributeDescriptor, GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates,
-            Primitive, Rasterizer, RenderContext as PipelineRenderContext, VertexAttributeFormat,
-            VertexBufferDescriptor, VertexInputRate,
+            GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates, Primitive,
+            Rasterizer, RenderContext as PipelineRenderContext,
         },
         render_pass::{LoadOp, StoreOp},
     },
 };
 
-#[derive(Copy, Clone, Zeroable, Pod)]
-#[repr(C)]
-struct Vertex {
-    pos: [f32; 4],
-}
+use crate::{
+    camera::{Camera, CameraBuffer},
+    components::MeshComponent,
+    mesh::{MeshMap, Vertex},
+};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
@@ -40,7 +39,7 @@ pub type ActiveContext = <ActiveContextBuilder as GpuBuilder>::Context;
 // }
 
 pub fn init(app: &mut App) {
-    let (ctx, surface) = {
+    let (ctx, surface, initial_aspect_ratio) = {
         let resources = app.get_resources();
         let window_state = resources
             .get::<window::WindowState>()
@@ -48,6 +47,7 @@ pub fn init(app: &mut App) {
 
         let mut ctx_builder = GfxContextBuilder::new();
         let window_size = window_state.window.inner_size();
+        let initial_aspect_ratio = window_size.width as f32 / window_size.height as f32;
         let surface = ctx_builder.create_surface(
             &window_state.window,
             Extent2D {
@@ -56,57 +56,36 @@ pub fn init(app: &mut App) {
             },
         );
         let ctx = Arc::new(ctx_builder.build());
-        (ctx, surface)
+        (ctx, surface, initial_aspect_ratio)
     };
     let resources = Arc::new(GpuResources::new(ctx.clone()));
 
-    // Timer
-    app.get_resources()
-        .insert(Instant::now())
-        .expect("[Artisan] failed to insert Instant resource");
+    {
+        // Insert MeshMap
+        app.get_resources()
+            .insert(MeshMap::new(ctx.clone()))
+            .expect("[Artisan] failed to insert mesh map");
+    }
 
     {
         let mut graph = ctx.create_graph(surface);
-
-        let vertices = [
-            Vertex {
-                pos: [-0.5, -0.5, 0.0, 1.0],
-            },
-            Vertex {
-                pos: [0.0, 0.5, 0.0, 1.0],
-            },
-            Vertex {
-                pos: [0.5, -0.5, 0.0, 1.0],
-            },
-        ];
-        let vertex_size = std::mem::size_of::<Vertex>();
         let frames_in_flight = graph.get_swapchain_image_count();
 
-        // TODO: Suboptimal
-        // let vertex_buffer =
-        //     resources.create_device_local_buffer("Vertex".into(), BufferUsage::Vertex, &vertices);
-        let vertex_buffer = SwapBuffer::new(
-            ctx.clone(),
-            "Vertex Buffer".into(),
-            frames_in_flight,
-            vertices,
-        );
-
-        let initial_offset = Offset {
-            // offset: [-0.2, 0.12, -0.4, 0.0],
-            offset: [0.0, 0.0, 0.0, 0.0],
+        let initial_camera = {
+            let camera = app.get_res::<Camera>();
+            camera.calc(initial_aspect_ratio)
         };
 
-        let offset_buffer = SwapBuffer::new(
+        let camera_buffer = SwapBuffer::new(
             ctx.clone(),
-            "Offset Uniform".into(),
+            "Camera Uniform".into(),
             frames_in_flight,
-            initial_offset,
+            initial_camera,
         );
 
         // Which is the equivalent of a DescriptorSetLayout
         let parts = mixture![
-            0: "offset" in Vertex: Offset
+            0: "camera_buffer" in Vertex: CameraBuffer
             // 1: "camera" in Vertex: ShaderCamera,
             // 2: "material" in Fragment: [dynamic Material],
             // 2: "albedo" in Fragment: sampler
@@ -128,8 +107,8 @@ pub fn init(app: &mut App) {
         for i in 0..frames_in_flight {
             let mut glue_bottle = resources.bottle(&mixture);
             glue_bottle.write_buffer(
-                PartIndex::Name("offset".into()),
-                offset_buffer.get(i as u32),
+                PartIndex::Name("camera_buffer".into()),
+                camera_buffer.get(i as u32),
                 None,
             );
             glue_drops.push(glue_bottle.apply());
@@ -142,6 +121,7 @@ pub fn init(app: &mut App) {
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
             builder.init(Box::new(move |rp| {
                 // let _ctx = ctx.clone();
+                let (buffer_descriptor, attributes) = Vertex::get_layout();
                 let desc = GraphicsPipelineDescriptor {
                     name: "simple_pipeline".into(),
                     mixtures: vec![&mixture],
@@ -151,17 +131,8 @@ pub fn init(app: &mut App) {
                         geometry: None,
                     },
                     rasterizer: Rasterizer::FILL,
-                    vertex_buffers: vec![VertexBufferDescriptor::new(
-                        0,
-                        vertex_size as _,
-                        VertexInputRate::Vertex,
-                    )],
-                    attributes: vec![AttributeDescriptor::new(
-                        0,
-                        0,
-                        0,
-                        VertexAttributeFormat::Vec4,
-                    )],
+                    vertex_buffers: vec![buffer_descriptor],
+                    attributes,
                     primitive: Primitive::TriangleList,
                     blend_targets: vec![true],
                     depth: None,
@@ -175,25 +146,24 @@ pub fn init(app: &mut App) {
                     .create_graphics_pipeline(desc, PipelineRenderContext::RenderPass((rp, 0)));
                 Box::new(pipeline)
             }));
-            builder.callback(Box::new(move |frame, p, _w, resources| {
+            builder.callback(Box::new(move |frame, p, world, resources| {
                 let FrameData {
                     cmd,
                     frame_index,
                     viewport,
                 } = frame;
 
-                let elapsed = resources
-                    .get::<Instant>()
-                    .expect("[Artisan] failed to get timeing resource")
-                    .elapsed()
-                    .as_secs_f32();
-                let offset = Offset {
-                    offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
+                // Calculate new camera
+                let camera = {
+                    let aspect_ratio = viewport.rect.width as f32 / viewport.rect.height as f32;
+                    resources.get::<Camera>().unwrap().calc(aspect_ratio)
                 };
-                offset_buffer.write(offset);
+                camera_buffer.write(camera);
+                camera_buffer.frame(frame_index);
 
-                vertex_buffer.frame(frame_index);
-                offset_buffer.frame(frame_index);
+                let mesh_map = resources
+                    .get::<MeshMap>()
+                    .expect("[Artisan] (renderer) failed to get mesh map");
 
                 cmd.bind_graphics_pipeline(&p);
 
@@ -201,11 +171,13 @@ pub fn init(app: &mut App) {
                 cmd.set_viewport(0, viewport.clone());
                 cmd.set_scissor(0, viewport.rect);
 
-                cmd.bind_vertex_buffer(0, vertex_buffer.get(frame_index), BufferRange::WHOLE);
-
                 cmd.snort_glue(0, &p, &glue_drops[frame_index as usize]);
 
-                cmd.draw(0..3, 0..1);
+                for (_e, mesh) in world.query::<&MeshComponent>().iter() {
+                    let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
+                    cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
+                    cmd.draw(0..vertex_count, 0..1);
+                }
             }));
             graph.add_node(Node::PassNode(builder.build()))
         }

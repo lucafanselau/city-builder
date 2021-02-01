@@ -20,7 +20,7 @@ use gfx_hal::{
     pool::{CommandPool, CommandPoolCreateFlags},
     prelude::CommandQueue,
     queue::Submission,
-    window::{PresentationSurface, Surface, SurfaceCapabilities, SwapchainConfig},
+    window::{PresentMode, PresentationSurface, Surface, SurfaceCapabilities, SwapchainConfig},
     Backend,
 };
 use parking_lot::{Mutex, MutexGuard, RwLock};
@@ -178,15 +178,7 @@ impl<B: Backend> GfxGraph<B> {
             {
                 let mut surface = self.surface.lock();
                 let caps: SurfaceCapabilities = surface.capabilities(&self.adapter.physical_device);
-
-                // TODO: EVENTS
-                // let _extent = caps
-                //     .current_extent
-                //     // TODO: REMOVE!!!
-                //     .unwrap_or(Extent2D {
-                //         width: 1600,
-                //         height: 900,
-                //     });
+                // log::info!("available modes: {:?}", caps.present_modes);
 
                 let mut swapchain_config = SwapchainConfig::from_caps(
                     &caps,
@@ -198,11 +190,8 @@ impl<B: Backend> GfxGraph<B> {
                     swapchain_config.image_count = 3;
                 }
 
-                // {
-                //     *self.surface_extent.write() = Some(swapchain_config.extent);
-                // }
-
-                // log::warn!("Swapchain Config: {:#?}", swapchain_config);
+                // log::info!("swapchain mode: {:?}", swapchain_config.present_mode);
+                swapchain_config.present_mode = PresentMode::IMMEDIATE;
 
                 unsafe { surface.configure_swapchain(&self.device, swapchain_config)? };
             };
@@ -268,7 +257,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
     type AttachmentIndex = AttachmentIndex;
 
     fn add_node(&mut self, node: Node<Self>) {
-        log::info!("ADD NODE");
         self.nodes.insert(builder::build_node(
             self.device.deref(),
             node,
@@ -278,7 +266,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
     }
 
     fn add_attachment(&mut self, attachment: GraphAttachment) -> Self::AttachmentIndex {
-        log::info!("ADD ATTACHMENT");
         let index = self.attachments.insert(attachment);
         AttachmentIndex::Custom(index)
     }
@@ -291,7 +278,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
     }
 
     fn get_backbuffer_attachment(&self) -> Self::AttachmentIndex {
-        log::info!("GET BACKBUFFER ATTACHMENT");
         AttachmentIndex::Backbuffer
     }
 

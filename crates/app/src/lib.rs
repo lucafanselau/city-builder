@@ -3,11 +3,13 @@
 
 pub mod event;
 pub mod stages;
+pub mod timing;
 
 pub use ecs::prelude::*;
-use ecs::system::MutatingSystem;
+use ecs::{resource::Resource, system::MutatingSystem};
 use event::{Event, Events};
-use std::borrow::Cow;
+use std::{any::type_name, borrow::Cow, cell::Ref};
+pub use timing::Timing;
 
 type Runner = Option<Box<dyn FnOnce(World, Resources, Scheduler)>>;
 
@@ -33,17 +35,44 @@ impl App {
             scheduler.add_stage(*stage);
         }
 
+        let default_plugins: Vec<Box<dyn FnOnce(&mut Self)>> = vec![Box::new(timing::init)];
+
         Self {
             world: World::new(),
             resources: Resources::new(),
             scheduler,
-            plugins: Vec::new(),
+            // Add default plugins
+            plugins: default_plugins,
             runner: None,
         }
     }
 
     pub fn get_resources(&mut self) -> &mut Resources {
         &mut self.resources
+    }
+
+    pub fn get_world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
+
+    pub fn insert_resource<T: Resource>(&mut self, initial: T) {
+        self.get_resources().insert(initial).unwrap_or_else(|e| {
+            let name = type_name::<T>();
+            panic!(
+                "[App] (insert_resource) error occurred while inserting type [{}]: {}",
+                name, e
+            );
+        })
+    }
+
+    pub fn get_res<T: Resource>(&self) -> Ref<T> {
+        self.resources.get::<T>().unwrap_or_else(|e| {
+            let name = type_name::<T>();
+            panic!(
+                "[App] (get_res) error occurred while resource query for type [{}]: {}",
+                name, e
+            );
+        })
     }
 
     pub fn add_plugin<Func>(&mut self, system: Func)
@@ -80,16 +109,19 @@ impl App {
     }
 
     pub fn run(mut self) {
+        // Run Plugins
         let mut startup: Vec<Box<dyn FnOnce(&mut Self)>> = self.plugins.drain(..).collect();
         for start_system in startup.drain(..) {
             start_system(&mut self);
         }
 
+        // Expect runner
         let runner = match self.runner {
             Some(runner) => runner,
             None => panic!("[App] (run) there is no runner specified, make sure set_runner is called at least once!")
         };
 
+        // Run the App
         runner(self.world, self.resources, self.scheduler);
     }
 }

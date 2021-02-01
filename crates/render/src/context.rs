@@ -61,6 +61,11 @@ pub trait GpuContext: Send + Sync {
     /// this is only valid for buffers that are writable, eg. memory_type == HostVisible
     unsafe fn write_to_buffer<D: Pod>(&self, buffer: &Self::BufferHandle, data: &D);
 
+    /// # Safety
+    ///
+    /// same as write to buffer
+    unsafe fn write_to_buffer_raw(&self, buffer: &Self::BufferHandle, data: &[u8]);
+
     /// Drop a Buffer handle
     fn drop_buffer(&self, buffer: Self::BufferHandle);
 
