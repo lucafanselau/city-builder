@@ -1,11 +1,14 @@
-use crate::resource::{
-    frame::Extent2D,
-    glue::Mixture,
-    pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
-};
 use crate::{
     command_encoder::CommandEncoder,
     resource::{buffer::BufferDescriptor, glue::MixturePart},
+};
+use crate::{
+    graph::builder::GraphBuilder,
+    resource::{
+        frame::Extent2D,
+        glue::Mixture,
+        pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource},
+    },
 };
 use crate::{
     graph::Graph,
@@ -44,7 +47,8 @@ pub trait GpuContext: Send + Sync {
     /// eg. The Command buffer in recording state
     type CommandEncoder: CommandEncoder<Self> + Debug + Send + Sync;
     type SwapchainImage: Borrow<Self::ImageView> + Debug + Send + Sync;
-    type ContextGraph: Graph;
+    type Graph: Graph;
+    type GraphBuilder: GraphBuilder;
     // Oke we will need to create abstractions for all of these first
     // fn create_initialized_buffer(
     //     &self,
@@ -137,5 +141,5 @@ pub trait GpuContext: Send + Sync {
     fn wait_idle(&self);
 
     // Create a Graph object (will replace the Rendering API above)
-    fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::ContextGraph;
+    fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::GraphBuilder;
 }

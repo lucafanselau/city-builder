@@ -1,155 +1,187 @@
-use std::ops::Range;
+use std::{
+    convert::TryInto,
+    mem::ManuallyDrop,
+    ops::Deref,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use generational_arena::{Arena, Index};
 use gfx_hal::{
+    adapter::Adapter,
     device::Device,
-    image::Layout,
-    pass::{Attachment, AttachmentOps, AttachmentRef, SubpassDependency, SubpassDesc},
+    format::{ChannelType, Format, ImageFeature},
+    pool::CommandPoolCreateFlags,
+    prelude::PhysicalDevice,
+    window::Surface,
     Backend,
 };
+use parking_lot::{Mutex, RwLock};
 use render::{
-    graph::{attachment::GraphAttachment, node::Node, nodes::pass::PassNode},
-    resource::render_pass::{LoadOp, StoreOp},
+    graph::{
+        attachment::GraphAttachment,
+        builder::GraphBuilder,
+        node::{self, Node},
+    },
+    resource::frame::Extent2D,
     util::format::TextureFormat,
 };
 
-use crate::compat::ToHalType;
-
-use super::{
-    attachment::AttachmentIndex,
-    nodes::{GfxNode, GfxPassNode},
-    GfxGraph,
+use crate::{
+    compat::ToHalType,
+    context::{GfxContext, Queues},
 };
 
-pub(super) fn build_node<B: Backend>(
-    ctx: &B::Device,
-    node: Node<GfxGraph<B>>,
-    attachments: &Arena<GraphAttachment>,
-    surface_format: TextureFormat,
-) -> GfxNode<B> {
-    match node {
-        Node::PassNode(n) => {
-            GfxNode::PassNode(build_pass_node(ctx, n, attachments, surface_format))
-        }
-    }
+use super::{
+    attachment::AttachmentIndex, nodes::GfxNode, FrameStatus, FrameSynchronization, GfxGraph,
+    GraphData,
+};
+
+pub struct GfxGraphBuilder<B: Backend> {
+    data: GraphData<B>,
+    attachments: Arena<GraphAttachment>,
+    nodes: Arena<Node<Self>>,
 }
 
-fn build_attachment<B: Backend>(
-    attachments: &Arena<GraphAttachment>,
-    index: Index,
-    load: LoadOp,
-    store: StoreOp,
-    layouts: Range<Layout>,
-) -> Attachment {
-    let graph_attachment = attachments
-        .get(index)
-        .expect("[PassNodeBuilder] failed to find output attachment");
+impl<B: Backend> GfxGraphBuilder<B> {
+    pub(crate) fn new(
+        device: Arc<B::Device>,
+        surface: Arc<Mutex<B::Surface>>,
+        extent: Extent2D,
+        adapter: Arc<Adapter<B>>,
+        queues: Arc<Queues<B>>,
+    ) -> Self {
+        let surface_format = {
+            use crate::compat::FromHalType;
 
-    Attachment {
-        format: Some(graph_attachment.format.clone().convert()),
-        // TODO: Multisampling
-        samples: 1u8,
-        ops: AttachmentOps::new(load.convert(), store.convert()),
-        stencil_ops: AttachmentOps::DONT_CARE,
-        layouts,
-    }
-}
+            let surface = surface.lock();
+            let supported_formats = surface
+                .supported_formats(&adapter.physical_device)
+                .unwrap_or_default();
 
-fn build_pass_node<B: Backend>(
-    ctx: &B::Device,
-    mut node: PassNode<GfxGraph<B>>,
-    graph_attachments: &Arena<GraphAttachment>,
-    surface_format: TextureFormat,
-) -> GfxPassNode<B> {
-    // ctx.create_render_pass(attachments, subpasses, dependencies);
+            let default_format = *supported_formats.get(0).unwrap_or(&Format::Rgba8Srgb);
 
-    let num_of_out = node.output_attachments.len();
-    let num_of_in = node.input_attachments.len();
-    let has_depth = node.depth_attachment.is_some();
+            let hal_format = supported_formats
+                .into_iter()
+                .find(|format| format.base_format().1 == ChannelType::Srgb)
+                .unwrap_or(default_format);
 
-    let mut attachments: Vec<Attachment> =
-        Vec::with_capacity(num_of_out + num_of_in + (if has_depth { 1 } else { 0 }));
+            hal_format
+                .convert()
+                .expect("[GfxGraph] failed to convert surface format")
+        };
 
-    attachments.extend(node.output_attachments.iter().map(|a| match a.index {
-        AttachmentIndex::Custom(index) => build_attachment::<B>(
-            graph_attachments,
-            index,
-            a.load.clone(),
-            a.store.clone(),
-            Layout::Undefined..Layout::ShaderReadOnlyOptimal,
-        ),
-        AttachmentIndex::Backbuffer => Attachment {
-            format: Some(surface_format.clone().convert()),
-            samples: 1u8,
-            ops: AttachmentOps::new(a.load.clone().convert(), a.store.clone().convert()),
-            stencil_ops: AttachmentOps::DONT_CARE,
-            layouts: Layout::Undefined..Layout::Present,
-        },
-    }));
-
-    attachments.extend(node.input_attachments.iter().map(|a| match a.index {
-        AttachmentIndex::Custom(index) => build_attachment::<B>(
-            graph_attachments,
-            index,
-            a.load.clone(),
-            a.store.clone(),
-            Layout::ShaderReadOnlyOptimal..Layout::ShaderReadOnlyOptimal,
-        ),
-        AttachmentIndex::Backbuffer => {
-            panic!("Backbuffer as input attachment in graph is not allowed")
-        }
-    }));
-
-    if let Some(a) = &node.depth_attachment {
-        attachments.push(match a.index {
-            AttachmentIndex::Custom(index) => build_attachment::<B>(
-                graph_attachments,
-                index,
-                a.load.clone(),
-                a.store.clone(),
-                Layout::DepthStencilAttachmentOptimal..Layout::DepthStencilAttachmentOptimal,
-            ),
-            AttachmentIndex::Backbuffer => {
-                panic!("Backbuffer as depth attachment in graph is not allowed")
-            }
+        let depth_format = vec![
+            TextureFormat::Depth32Sfloat,
+            TextureFormat::Depth24PlusStencil8,
+        ]
+        .into_iter()
+        .find(|f| -> bool {
+            let properties = adapter.physical_device.format_properties(Some(f.convert()));
+            properties
+                .optimal_tiling
+                .contains(ImageFeature::DEPTH_STENCIL_ATTACHMENT)
         })
+        .expect("[GfxGraph] failed to find depth format");
+
+        let graphics_family = queues.graphics_family;
+        let command_pool = unsafe {
+            device
+                .create_command_pool(graphics_family, CommandPoolCreateFlags::RESET_INDIVIDUAL)
+                .expect("[Swapper] failed to create command_pool")
+        };
+
+        let data = GraphData {
+            device,
+            surface,
+            adapter,
+            queues,
+            depth_format,
+            surface_format,
+            surface_extent: RwLock::new(extent),
+            frames_in_flight: 3u32,
+            command_pool: ManuallyDrop::new(Mutex::new(command_pool)),
+        };
+
+        Self {
+            data,
+            attachments: Default::default(),
+            nodes: Default::default(),
+        }
+    }
+}
+
+impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
+    type Context = GfxContext<B>;
+    type AttachmentIndex = AttachmentIndex;
+    type Graph = GfxGraph<B>;
+
+    fn add_node(&mut self, node: Node<Self>) {
+        self.nodes.insert(node);
     }
 
-    let create_attachment_ref = |range: Range<usize>, layout: Layout| -> Vec<AttachmentRef> {
-        range.into_iter().map(|i| (i, layout)).collect()
-    };
+    fn add_attachment(&mut self, attachment: GraphAttachment) -> Self::AttachmentIndex {
+        AttachmentIndex::Custom(self.attachments.insert(attachment))
+    }
 
-    let depth_stencil = if node.depth_attachment.is_some() {
-        Some((
-            num_of_out + num_of_in,
-            Layout::DepthStencilAttachmentOptimal,
-        ))
-    } else {
-        None
-    };
+    fn attachment_index(
+        &self,
+        name: std::borrow::Cow<'static, str>,
+    ) -> Option<Self::AttachmentIndex> {
+        self.attachments
+            .iter()
+            .find(|(i, a)| a.name == name)
+            .map(|(i, a)| AttachmentIndex::Custom(i))
+    }
 
-    let subpass = SubpassDesc {
-        colors: &create_attachment_ref(0..num_of_out, Layout::ColorAttachmentOptimal),
-        depth_stencil: depth_stencil.as_ref(),
-        inputs: &create_attachment_ref(
-            num_of_out..(num_of_out + num_of_in),
-            Layout::ShaderReadOnlyOptimal,
-        ),
-        resolves: &Vec::new(),
-        preserves: &Vec::new(),
-    };
+    fn get_backbuffer_attachment(&self) -> Self::AttachmentIndex {
+        AttachmentIndex::Backbuffer
+    }
 
-    let dependencies: Vec<SubpassDependency> = Vec::new();
+    fn get_surface_format(&self) -> TextureFormat {
+        self.data.surface_format
+    }
 
-    let render_pass = unsafe {
-        ctx.create_render_pass(attachments, &vec![subpass], dependencies)
-            .expect("Failed to build PassNode")
-    };
+    fn default_depth_format(&self) -> TextureFormat {
+        self.data.depth_format
+    }
 
-    node.callbacks.init(&render_pass);
+    fn get_swapchain_image_count(&self) -> usize {
+        self.data.frames_in_flight as _
+    }
 
-    GfxPassNode {
-        graph_node: node,
-        render_pass,
+    fn build(self) -> Self::Graph {
+        let GfxGraphBuilder {
+            attachments,
+            nodes,
+            data,
+        } = self;
+
+        let frames_in_flight = data.frames_in_flight;
+        let mut frames = Vec::with_capacity(frames_in_flight.try_into().unwrap());
+        unsafe {
+            for _ in 0..frames_in_flight {
+                frames.push(ManuallyDrop::new(Mutex::new(
+                    FrameSynchronization::<B>::create(&data.device),
+                )));
+            }
+        }
+
+        // TODO: Build attachments
+        // Build nodes
+        let nodes: Arena<GfxNode<B>> = nodes
+            .into_iter()
+            .map(|n| {
+                super::nodes::build_node(data.device.deref(), n, &attachments, data.surface_format)
+            })
+            .collect();
+
+        GfxGraph {
+            attachments,
+            nodes,
+            data,
+            should_configure_swapchain: AtomicBool::new(true),
+            current_frame: RwLock::new((0, FrameStatus::Inactive)),
+            frames,
+        }
     }
 }

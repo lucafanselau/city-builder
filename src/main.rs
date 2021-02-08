@@ -10,12 +10,14 @@ fn spawner_plugin(app: &mut app::App) {
             .get_resources()
             .get_mut::<artisan::mesh::MeshMap>()
             .expect("[main] failed to get mesh_map");
-        mesh_map.load_mesh("Simple Circle", artisan::factory::circle(0.33, 360))
+        // mesh_map.load_mesh("Simple Circle", artisan::factory::circle(0.33, 360))
+        mesh_map.load_mesh("Simple Circle", artisan::factory::unit_cube())
     };
 
-    let _entity = app
-        .get_world_mut()
-        .spawn((artisan::components::MeshComponent(mesh_id),));
+    let _entity = app.get_world_mut().spawn((
+        artisan::components::MeshComponent(mesh_id),
+        artisan::material::MaterialComponent::YELLOW_RUBBER,
+    ));
 }
 
 fn main() {

@@ -1,9 +1,12 @@
-use crate::heapy::{AllocationIndex, Heapy};
 use crate::plumber::Plumber;
 use crate::{command::GfxCommand, context_builder::GfxBuilder};
 use crate::{
     compat::{HalCompatibleSubpassDescriptor, ToHalType},
     graph::GfxGraph,
+};
+use crate::{
+    graph::builder::GfxGraphBuilder,
+    heapy::{AllocationIndex, Heapy},
 };
 use bytemuck::Pod;
 use gfx_hal::pass::{Attachment, SubpassDependency, SubpassDesc};
@@ -80,7 +83,8 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     type CommandEncoder = GfxCommand<B>;
     type SwapchainImage =
         <<B as gfx_hal::Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
-    type ContextGraph = GfxGraph<B>;
+    type Graph = GfxGraph<B>;
+    type GraphBuilder = GfxGraphBuilder<B>;
 
     fn create_buffer(&self, desc: &BufferDescriptor) -> Self::BufferHandle {
         unsafe {
@@ -266,9 +270,9 @@ impl<B: Backend> GpuContext for GfxContext<B> {
         self.device.wait_idle().expect("failed to wait idle");
     }
 
-    fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::ContextGraph {
+    fn create_graph(&self, surface: Self::SurfaceHandle) -> Self::GraphBuilder {
         let (surface, extent) = surface;
-        GfxGraph::<B>::new(
+        GfxGraphBuilder::<B>::new(
             self.device.clone(),
             surface,
             extent,

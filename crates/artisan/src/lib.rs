@@ -1,6 +1,7 @@
 pub mod camera;
 pub mod components;
 pub mod factory;
+pub mod material;
 pub mod mesh;
 mod renderer;
 

@@ -1,4 +1,3 @@
-use gfx_hal::format::Format;
 use gfx_hal::image::{Access, Extent, Layout};
 use gfx_hal::memory::Dependencies;
 use gfx_hal::pass::{
@@ -21,7 +20,7 @@ use gfx_hal::{
     command::{BufferCopy as HalBufferCopy, ClearColor, ClearDepthStencil, ClearValue},
     pso::DescriptorType,
 };
-use render::resource::frame::{Clear, Extent2D, Extent3D};
+use gfx_hal::{format::Format, image::Tiling};
 use render::resource::pipeline::{
     AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
     Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate,
@@ -35,6 +34,10 @@ use render::resource::{
 };
 use render::resource::{buffer::BufferRange, glue::MixturePart, pipeline::ShaderType};
 use render::util::format::{ImageAccess, TextureFormat, TextureLayout};
+use render::{
+    resource::frame::{Clear, Extent2D, Extent3D},
+    util::format::ImageTiling,
+};
 
 pub trait ToHalType {
     type Target;
@@ -484,6 +487,17 @@ impl ToHalType for BufferCopy {
             src: self.src_offset,
             dst: self.dst_offset,
             size: self.size,
+        }
+    }
+}
+
+impl ToHalType for ImageTiling {
+    type Target = Tiling;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            ImageTiling::Linear => Tiling::Linear,
+            ImageTiling::Optimal => Tiling::Optimal,
         }
     }
 }

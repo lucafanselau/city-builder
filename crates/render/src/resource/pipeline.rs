@@ -231,6 +231,8 @@ pub enum PipelineStage {
 pub struct GraphicsPipelineDescriptor<'a, Context: GpuContext> {
     pub name: Cow<'static, str>,
     pub mixtures: Vec<&'a Mixture<Context>>,
+    /// Push Constants
+    pub push_constants: Vec<(ShaderType, Range<u32>)>,
     pub shaders: PipelineShaders<Context>,
     /// TODO: Render Pass layout for this Pipeline
     pub rasterizer: Rasterizer,

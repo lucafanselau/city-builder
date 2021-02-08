@@ -1,6 +1,10 @@
 use app::{App, IntoFunctionSystem, Timing};
 use bytemuck::{Pod, Zeroable};
-use std::cell::{Ref, RefMut};
+use glam::{Vec2, XY};
+use std::{
+    cell::{Ref, RefMut},
+    ops::Deref,
+};
 use window::{events::VirtualKeyCode, input::Input};
 
 /// The struct that can be sent to shaders
@@ -12,11 +16,16 @@ pub struct CameraBuffer {
 
 #[derive(Debug)]
 pub struct Camera {
-    eye: glam::Vec3,
+    pub(crate) eye: glam::Vec3,
     dir: glam::Vec3,
+    // Angles in degrees?
+    yaw: f32,
+    pitch: f32,
 }
 
 const UP: glam::Vec3 = glam::const_vec3!([0.0, 1.0, 0.0]);
+const SENSITIVITY: f32 = 0.3;
+const MOVEMENT_SENSITIVITY: f32 = 0.5;
 
 impl Camera {
     pub fn calc(&self, aspect_ratio: f32) -> CameraBuffer {
@@ -30,24 +39,64 @@ impl Camera {
 }
 
 fn camera_system(mut camera: RefMut<Camera>, input: Ref<Input>, timing: Ref<Timing>) {
-    let mut dir = glam::vec2(0.0, 0.0);
-    let mut calc_dir = |key: VirtualKeyCode, d: glam::Vec2| {
-        if input.is_pressed(key) {
-            dir += d
-        }
-    };
-    calc_dir(VirtualKeyCode::W, glam::vec2(0.0, 1.0));
-    calc_dir(VirtualKeyCode::S, glam::vec2(0.0, -1.0));
-    calc_dir(VirtualKeyCode::A, glam::vec2(-1.0, 0.0));
-    calc_dir(VirtualKeyCode::D, glam::vec2(1.0, 0.0));
+    // Rotating
+    {
+        // log::info!("{:?}", input.mouse_delta);
+        // Update Yaw and pitch
+        let XY { x, y } = input.mouse_delta.deref();
+        camera.yaw -= x * SENSITIVITY;
+        camera.pitch += y * SENSITIVITY;
 
-    camera.eye += (0.2 * timing.dt * dir).extend(0.0);
+        let pitch = camera.pitch.to_radians();
+        let yaw = camera.yaw.to_radians();
+        camera.dir = glam::vec3(
+            pitch.cos() * yaw.cos(),
+            pitch.sin(),
+            pitch.cos() * yaw.sin(),
+        );
+    }
+    // Movement
+    {
+        enum Direction {
+            Along,
+            Orthogonal,
+        }
+
+        // The direction to move in
+        let mut delta_dir = glam::vec3(0.0, 0.0, 0.0);
+        // The direction that is orthogonal to the forward direction and the Up vector (used to move to the side)
+        let right_dir = camera.dir.cross(UP);
+        let mut calc_dir = |key: VirtualKeyCode, d: Direction, scalar: f32| {
+            if input.is_pressed(key) {
+                delta_dir += scalar
+                    * match d {
+                        Direction::Along => camera.dir,
+                        Direction::Orthogonal => right_dir,
+                    }
+            }
+        };
+        calc_dir(VirtualKeyCode::W, Direction::Along, 1f32);
+        calc_dir(VirtualKeyCode::S, Direction::Along, -1f32);
+        calc_dir(VirtualKeyCode::A, Direction::Orthogonal, -1f32);
+        calc_dir(VirtualKeyCode::D, Direction::Orthogonal, 1f32);
+
+        if input.is_pressed(VirtualKeyCode::Space) {
+            delta_dir += UP
+        }
+        if input.is_pressed(VirtualKeyCode::LShift) {
+            delta_dir -= UP
+        }
+
+        camera.eye += MOVEMENT_SENSITIVITY * timing.dt * delta_dir;
+    }
 }
 
 pub(crate) fn init(app: &mut App) {
     app.insert_resource(Camera {
         eye: glam::vec3(0.0, 0.0, 1.0),
         dir: glam::vec3(0.0, 0.0, -1.0),
+        yaw: 0.0,
+        pitch: 0.0,
     });
     app.add_system(app::stages::UPDATE, camera_system.into_system());
 }

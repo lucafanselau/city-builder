@@ -3,9 +3,16 @@ use std::{any::TypeId, path::Path, sync::Arc, time::Instant};
 use app::{App, IntoMutatingSystem, Resources, World};
 use bytemuck::{Pod, Zeroable};
 use gfx::context::ContextBuilder as GfxContextBuilder;
+use glam::Vec3A;
 use render::{
     context::GpuBuilder,
-    graph::{node::Node, nodes::callbacks::FrameData, Graph},
+    graph::{
+        attachment::{AttachmentSize, GraphAttachment},
+        builder::GraphBuilder,
+        node::Node,
+        nodes::callbacks::FrameData,
+        Graph,
+    },
     prelude::*,
     resource::{
         frame::Extent2D,
@@ -20,14 +27,21 @@ use render::{
 use crate::{
     camera::{Camera, CameraBuffer},
     components::MeshComponent,
+    material::{MaterialComponent, SolidMaterial},
     mesh::{MeshMap, Vertex},
 };
 
-#[derive(Copy, Clone, Zeroable, Pod)]
+const LIGHT_POSITION: Vec3A = glam::const_vec3a!([10.0, 10.0, 10.0]);
+
+#[derive(Copy, Clone)]
 #[repr(C)]
-struct Offset {
-    offset: [f32; 4],
+struct Light {
+    light_position: Vec3A,
+    view_position: Vec3A,
 }
+
+unsafe impl Zeroable for Light {}
+unsafe impl Pod for Light {}
 
 pub type ActiveContextBuilder = GfxContextBuilder;
 pub type ActiveContext = <ActiveContextBuilder as GpuBuilder>::Context;
@@ -68,8 +82,8 @@ pub fn init(app: &mut App) {
     }
 
     {
-        let mut graph = ctx.create_graph(surface);
-        let frames_in_flight = graph.get_swapchain_image_count();
+        let mut graph_builder = ctx.create_graph(surface);
+        let frames_in_flight = graph_builder.get_swapchain_image_count();
 
         let initial_camera = {
             let camera = app.get_res::<Camera>();
@@ -83,9 +97,25 @@ pub fn init(app: &mut App) {
             initial_camera,
         );
 
+        let initial_light = {
+            let camera = app.get_res::<Camera>();
+            Light {
+                light_position: LIGHT_POSITION,
+                view_position: camera.eye.into(),
+            }
+        };
+
+        let light_buffer = SwapBuffer::new(
+            ctx.clone(),
+            "Light Uniform".into(),
+            frames_in_flight,
+            initial_light,
+        );
+
         // Which is the equivalent of a DescriptorSetLayout
         let parts = mixture![
-            0: "camera_buffer" in Vertex: CameraBuffer
+            0: "camera_buffer" in Vertex: CameraBuffer,
+            1: "light" in Fragment: Light
             // 1: "camera" in Vertex: ShaderCamera,
             // 2: "material" in Fragment: [dynamic Material],
             // 2: "albedo" in Fragment: sampler
@@ -96,10 +126,10 @@ pub fn init(app: &mut App) {
         // TODO: load that from file or something
 
         let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
-            Path::new("assets/shaders/simple.vert").into(),
+            Path::new("assets/shaders/solid.vert").into(),
         ));
         let fragment_code = ctx.compile_shader(ShaderSource::GlslFile(
-            Path::new("assets/shaders/simple.frag").into(),
+            Path::new("assets/shaders/solid.frag").into(),
         ));
 
         let mut glue_drops = Vec::with_capacity(frames_in_flight);
@@ -111,20 +141,33 @@ pub fn init(app: &mut App) {
                 camera_buffer.get(i as u32),
                 None,
             );
+            glue_bottle.write_buffer(PartIndex::Binding(1), light_buffer.get(i as _), None);
             glue_drops.push(glue_bottle.apply());
         }
 
-        let backbuffer = graph.get_backbuffer_attachment();
+        let backbuffer = graph_builder.get_backbuffer_attachment();
+        // Depth attachment
+        let depth_attachment = graph_builder.add_attachment(GraphAttachment::new(
+            "Depth Attachment",
+            AttachmentSize::SWAPCHAIN,
+            graph_builder.default_depth_format(),
+        ));
+
         {
-            let mut builder =
-                graph.build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
+            let mut builder = graph_builder
+                .build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
+            // builder.set_depth()
             builder.init(Box::new(move |rp| {
                 // let _ctx = ctx.clone();
                 let (buffer_descriptor, attributes) = Vertex::get_layout();
                 let desc = GraphicsPipelineDescriptor {
                     name: "simple_pipeline".into(),
                     mixtures: vec![&mixture],
+                    push_constants: vec![(
+                        ShaderType::Fragment,
+                        0..(std::mem::size_of::<SolidMaterial>() as _),
+                    )],
                     shaders: PipelineShaders {
                         vertex: vertex_code.clone(),
                         fragment: fragment_code.clone(),
@@ -153,13 +196,23 @@ pub fn init(app: &mut App) {
                     viewport,
                 } = frame;
 
-                // Calculate new camera
-                let camera = {
-                    let aspect_ratio = viewport.rect.width as f32 / viewport.rect.height as f32;
-                    resources.get::<Camera>().unwrap().calc(aspect_ratio)
-                };
-                camera_buffer.write(camera);
-                camera_buffer.frame(frame_index);
+                {
+                    // Calculate new camera
+                    let camera = resources.get::<Camera>().unwrap();
+                    let camera_data = {
+                        let aspect_ratio = viewport.rect.width as f32 / viewport.rect.height as f32;
+                        camera.calc(aspect_ratio)
+                    };
+                    camera_buffer.write(camera_data);
+                    camera_buffer.frame(frame_index);
+                    // Update Light Buffer
+                    let light_data = Light {
+                        light_position: LIGHT_POSITION,
+                        view_position: camera.eye.into(),
+                    };
+                    light_buffer.write(light_data);
+                    light_buffer.frame(frame_index);
+                }
 
                 let mesh_map = resources
                     .get::<MeshMap>()
@@ -173,16 +226,27 @@ pub fn init(app: &mut App) {
 
                 cmd.snort_glue(0, &p, &glue_drops[frame_index as usize]);
 
-                for (_e, mesh) in world.query::<&MeshComponent>().iter() {
-                    let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
-                    cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
-                    cmd.draw(0..vertex_count, 0..1);
+                for (_e, (mesh, mat)) in
+                    world.query::<(&MeshComponent, &MaterialComponent)>().iter()
+                {
+                    if let MaterialComponent::Solid(ref solid) = mat {
+                        let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
+
+                        let push_data: &[u32] = bytemuck::cast_slice(bytemuck::bytes_of(solid));
+                        // log::info!("Push Data is: \n{:#?}", push_data);
+                        cmd.push_constants(&p, ShaderType::Fragment, 0, push_data);
+
+                        cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
+                        cmd.draw(0..vertex_count, 0..1);
+                    } else {
+                        unimplemented!();
+                    }
                 }
             }));
-            graph.add_node(Node::PassNode(builder.build()))
+            graph_builder.add_node(Node::PassNode(builder.build()))
         }
         app.get_resources()
-            .insert(graph)
+            .insert(graph_builder.build())
             .expect("[Artisan] failed to insert Renderer State");
     };
 
@@ -191,7 +255,7 @@ pub fn init(app: &mut App) {
 
 fn frame_render(world: &mut World, resources: &mut Resources) {
     let mut graph = resources
-        .get_mut::<<ActiveContext as GpuContext>::ContextGraph>()
+        .get_mut::<<ActiveContext as GpuContext>::Graph>()
         .expect("[Artisan] failed to get graph");
 
     graph.execute(world, resources);

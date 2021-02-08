@@ -1,8 +1,8 @@
-use super::{nodes::pass::PassNode, Graph};
+use super::{builder::GraphBuilder, nodes::pass::PassNode};
 
 pub enum Node<G>
 where
-    G: Graph + ?Sized,
+    G: GraphBuilder + ?Sized,
 {
     PassNode(PassNode<G>),
 }

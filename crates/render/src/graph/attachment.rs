@@ -1,11 +1,15 @@
 use std::borrow::Cow;
 
-use crate::util::format::TextureFormat;
+use crate::util::format::{ImageTiling, TextureFormat};
 
 #[derive(Debug, Clone)]
 pub enum AttachmentSize {
     Relative(f32, f32),
     Absolute(u32, u32),
+}
+
+impl AttachmentSize {
+    pub const SWAPCHAIN: Self = Self::Relative(1.0, 1.0);
 }
 
 #[derive(Debug)]
@@ -14,6 +18,7 @@ pub struct GraphAttachment {
     pub size: AttachmentSize,
     pub format: TextureFormat,
     pub is_backbuffer: bool,
+    pub tiling: ImageTiling,
 }
 
 impl GraphAttachment {
@@ -27,6 +32,7 @@ impl GraphAttachment {
             size,
             format,
             is_backbuffer: false,
+            tiling: ImageTiling::Optimal,
         }
     }
 }

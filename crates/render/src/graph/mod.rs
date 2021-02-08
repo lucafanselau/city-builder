@@ -6,14 +6,13 @@ use crate::{prelude::GpuContext, util::format::TextureFormat};
 
 use self::{
     attachment::GraphAttachment,
+    builder::GraphBuilder,
     node::Node,
     nodes::{callbacks::UserData, pass::PassNodeBuilder},
 };
 
 pub mod attachment;
-
-// Disabled but should be reusable in gfx
-// pub mod builder;
+pub mod builder;
 pub mod node;
 pub mod nodes;
 
@@ -21,19 +20,10 @@ pub mod nodes;
 pub trait Graph {
     type Context: GpuContext;
     type AttachmentIndex: Clone;
-
-    fn add_node(&mut self, node: Node<Self>);
-    fn add_attachment(&mut self, attachment: GraphAttachment) -> Self::AttachmentIndex;
-    fn attachment_index(&self, name: Cow<'static, str>) -> Option<Self::AttachmentIndex>;
-
-    fn get_backbuffer_attachment(&self) -> Self::AttachmentIndex;
+    type Builder: GraphBuilder;
 
     fn execute(&mut self, world: &World, resources: &Resources);
 
-    fn get_surface_format(&self) -> TextureFormat;
-    fn get_swapchain_image_count(&self) -> usize;
-
-    fn build_pass_node<U: UserData>(&self, name: Cow<'static, str>) -> PassNodeBuilder<Self, U> {
-        PassNodeBuilder::new(name)
-    }
+    /// This function will remove all the prebuild things and strips down to the builder graph
+    fn into_builder(self) -> Self::Builder;
 }

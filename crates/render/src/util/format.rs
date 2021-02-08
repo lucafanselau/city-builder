@@ -1,5 +1,5 @@
 // This is like a straight copy from wgpu (if we need more we can add those later)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum TextureFormat {
     R8Unorm,
     R8Snorm,
@@ -83,4 +83,10 @@ pub enum ImageAccess {
     HostWrite,
     MemoryRead,
     MemoryWrite,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ImageTiling {
+    Linear,
+    Optimal,
 }

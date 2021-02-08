@@ -142,7 +142,9 @@ impl<B: Backend> Plumber<B> {
             self.device
                 .create_pipeline_layout(
                     set_layouts,
-                    iter::empty::<(ShaderStageFlags, std::ops::Range<u32>)>(),
+                    desc.push_constants
+                        .into_iter()
+                        .map(|(t, r)| (t.convert(), r)),
                 )
                 .unwrap_or_else(|_| {
                     panic!(

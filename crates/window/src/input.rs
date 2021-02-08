@@ -32,6 +32,8 @@ fn input_system(
     if let Some(CursorMoved(latest_cursor)) = cursor_moved.iter().last() {
         input.mouse_delta = input.mouse_pos - *latest_cursor;
         input.mouse_pos = *latest_cursor;
+    } else {
+        input.mouse_delta = glam::Vec2::zero()
     }
 
     for KeyboardInput { key, state } in keys.iter() {

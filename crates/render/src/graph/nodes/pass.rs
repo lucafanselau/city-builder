@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    graph::Graph,
+    graph::{builder::GraphBuilder, Graph},
     resource::render_pass::{LoadOp, StoreOp},
 };
 
@@ -14,12 +14,12 @@ pub struct PassAttachment<I: Clone> {
     pub store: StoreOp,
 }
 
-pub struct PassNode<G: Graph + ?Sized> {
+pub struct PassNode<G: GraphBuilder + ?Sized> {
     pub name: Cow<'static, str>,
-    pub output_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub input_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub depth_attachment: Option<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    pub callbacks: Box<dyn PassCallbacks<<G as Graph>::Context>>,
+    pub output_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    pub input_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    pub depth_attachment: Option<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    pub callbacks: Box<dyn PassCallbacks<<G as GraphBuilder>::Context>>,
 }
 
 // impl<Context: 'static + GpuContext, U: Send + Sync + 'static> Node for PassNode<Context, U> {
@@ -44,16 +44,16 @@ pub struct PassNode<G: Graph + ?Sized> {
 // Builder for Pass Nodes
 //
 
-pub struct PassNodeBuilder<G: Graph + ?Sized, U: UserData> {
+pub struct PassNodeBuilder<G: GraphBuilder + ?Sized, U: UserData> {
     name: Cow<'static, str>,
-    output_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    input_attachments: Vec<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    depth_attachment: Option<PassAttachment<<G as Graph>::AttachmentIndex>>,
-    init: Option<Box<dyn InitCallback<<G as Graph>::Context, U>>>,
-    cb: Option<Box<dyn PassCallback<<G as Graph>::Context, U>>>,
+    output_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    input_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    depth_attachment: Option<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
+    init: Option<Box<dyn InitCallback<<G as GraphBuilder>::Context, U>>>,
+    cb: Option<Box<dyn PassCallback<<G as GraphBuilder>::Context, U>>>,
 }
 
-impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
+impl<G: GraphBuilder + ?Sized, U: UserData> PassNodeBuilder<G, U> {
     pub fn new(name: Cow<'static, str>) -> Self {
         Self {
             name,
@@ -67,7 +67,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn add_output(
         &mut self,
-        index: <G as Graph>::AttachmentIndex,
+        index: <G as GraphBuilder>::AttachmentIndex,
         load: LoadOp,
         store: StoreOp,
     ) -> &mut Self {
@@ -78,7 +78,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn add_input(
         &mut self,
-        index: <G as Graph>::AttachmentIndex,
+        index: <G as GraphBuilder>::AttachmentIndex,
         load: LoadOp,
         store: StoreOp,
     ) -> &mut Self {
@@ -89,7 +89,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn set_depth(
         &mut self,
-        index: <G as Graph>::AttachmentIndex,
+        index: <G as GraphBuilder>::AttachmentIndex,
         load: LoadOp,
         store: StoreOp,
     ) -> &mut Self {
@@ -99,7 +99,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn init(
         &mut self,
-        func: Box<dyn InitCallback<<G as Graph>::Context, U> + 'static>,
+        func: Box<dyn InitCallback<<G as GraphBuilder>::Context, U> + 'static>,
     ) -> &mut Self {
         self.init = Some(func);
         self
@@ -107,7 +107,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn callback(
         &mut self,
-        func: Box<dyn PassCallback<<G as Graph>::Context, U> + 'static>,
+        func: Box<dyn PassCallback<<G as GraphBuilder>::Context, U> + 'static>,
     ) -> &mut Self {
         self.cb = Some(func);
         self
@@ -115,7 +115,7 @@ impl<G: Graph + ?Sized, U: UserData> PassNodeBuilder<G, U> {
 
     pub fn build(&mut self) -> PassNode<G>
     where
-        <G as Graph>::Context: 'static,
+        <G as GraphBuilder>::Context: 'static,
     {
         let init = self
             .init

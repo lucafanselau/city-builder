@@ -17,18 +17,22 @@ use crate::renderer::ActiveContext;
 #[repr(C)]
 pub struct Vertex {
     pub pos: glam::Vec3,
+    pub normal: glam::Vec3,
 }
 
 impl Vertex {
     pub(crate) fn get_layout() -> (VertexBufferDescriptor, Vec<AttributeDescriptor>) {
         let size = std::mem::size_of::<Self>();
         let buffer_descriptor = VertexBufferDescriptor::new(0, size as _, VertexInputRate::Vertex);
-        let attributes = vec![AttributeDescriptor::new(
-            0,
-            0,
-            0,
-            VertexAttributeFormat::Vec3,
-        )];
+        let attributes = vec![
+            AttributeDescriptor::new(0, 0, 0, VertexAttributeFormat::Vec3),
+            AttributeDescriptor::new(
+                1,
+                0,
+                std::mem::size_of::<glam::Vec3>() as _,
+                VertexAttributeFormat::Vec3,
+            ),
+        ];
         (buffer_descriptor, attributes)
     }
 }

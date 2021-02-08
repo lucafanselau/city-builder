@@ -75,6 +75,19 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
         }
     }
 
+    fn push_constants(
+        &mut self,
+        pipeline: &<GfxContext<B> as GpuContext>::PipelineHandle,
+        shader: render::prelude::ShaderType,
+        offset: u32,
+        data: &[u32],
+    ) {
+        unsafe {
+            self.command
+                .push_graphics_constants(&pipeline.1, shader.convert(), offset, data)
+        }
+    }
+
     fn bind_vertex_buffer(
         &mut self,
         binding: u32,
@@ -84,12 +97,6 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
         unsafe {
             self.command
                 .bind_vertex_buffers(binding, iter::once((&buffer.0, range.convert())))
-        }
-    }
-
-    fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
-        unsafe {
-            self.command.draw(vertices, instances);
         }
     }
 
@@ -106,6 +113,12 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
                 vec![&glue.handle.handle.1],
                 Vec::<&u32>::new(),
             )
+        }
+    }
+
+    fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
+        unsafe {
+            self.command.draw(vertices, instances);
         }
     }
 

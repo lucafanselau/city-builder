@@ -2,7 +2,6 @@ use app::{event::Events, App};
 use ecs::{prelude::*, schedule::executor::ScheduleExecutor};
 
 use log::info;
-use winit::window::{Window, WindowBuilder};
 use winit::{
     dpi::{PhysicalSize, Size},
     event_loop::ControlFlow,
@@ -12,6 +11,10 @@ use winit::{
     event::{Event, WindowEvent},
 };
 use winit::{event::KeyboardInput, event_loop::EventLoop};
+use winit::{
+    event::{ElementState, VirtualKeyCode},
+    window::{Window, WindowBuilder},
+};
 
 pub mod events;
 pub mod input;
@@ -97,7 +100,14 @@ pub fn init_window(app: &mut App) {
                                     ..
                                 },
                             ..
-                        } => dispatch_event(&mut resources, events::KeyboardInput { key, state }),
+                        } => {
+                            if key == VirtualKeyCode::Escape && state == ElementState::Pressed {
+                                log::info!("Escape was pressed; stopping");
+                                *control_flow = ControlFlow::Exit;
+                            }
+                            dispatch_event(&mut resources, events::KeyboardInput { key, state })
+                        }
+
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                             info!("The close button was pressed; stopping");

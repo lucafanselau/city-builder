@@ -1,7 +1,10 @@
-use crate::resource::buffer::{BufferCopy, BufferRange};
 use crate::resource::frame::Clear;
 use crate::resource::pipeline::{Rect, Viewport};
 use crate::{context::GpuContext, resource::glue::Glue};
+use crate::{
+    prelude::ShaderType,
+    resource::buffer::{BufferCopy, BufferRange},
+};
 use std::ops::Range;
 
 pub trait CommandEncoder<C: GpuContext + ?Sized> {
@@ -19,6 +22,15 @@ pub trait CommandEncoder<C: GpuContext + ?Sized> {
     fn set_scissor(&mut self, index: u32, scissor: Rect);
 
     fn bind_graphics_pipeline(&mut self, pipeline: &C::PipelineHandle);
+
+    fn push_constants(
+        &mut self,
+        pipeline: &C::PipelineHandle,
+        shader: ShaderType,
+        offset: u32,
+        data: &[u32],
+    );
+
     fn bind_vertex_buffer(&mut self, binding: u32, buffer: &C::BufferHandle, range: BufferRange);
 
     fn snort_glue(&mut self, set_idx: usize, pipeline: &C::PipelineHandle, glue: &Glue<C>);

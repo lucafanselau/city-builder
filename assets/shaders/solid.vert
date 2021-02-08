@@ -8,8 +8,12 @@ layout (binding = 0) uniform CameraBuffer {
 } camera;
 
 layout (location = 0) out vec3 pass_normal;
+layout (location = 1) out vec3 pass_fragment_position;
 
 void main() {
-    gl_Position = camera.view_projection * vec4(in_pos, 1.0);
+    // Pass to fragment shader
+    pass_fragment_position = in_pos;
     pass_normal = in_normal;
+    // Calculate output position
+    gl_Position = camera.view_projection * vec4(in_pos, 1.0);
 }
