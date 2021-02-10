@@ -19,7 +19,7 @@ pub mod nodes;
 // TODO: Send + Sync (mainly pass callbacks are destroying that currently)
 pub trait Graph {
     type Context: GpuContext;
-    type AttachmentIndex: Clone;
+    type AttachmentIndex: Clone + Copy;
     type Builder: GraphBuilder;
 
     fn execute(&mut self, world: &World, resources: &Resources);

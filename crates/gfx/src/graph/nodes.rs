@@ -1,7 +1,8 @@
 use gfx_hal::Backend;
 use render::graph::nodes::pass::PassNode;
+use uuid::Uuid;
 
-use std::ops::Range;
+use std::ops::{Deref, Range};
 
 use generational_arena::{Arena, Index};
 use gfx_hal::{
@@ -17,7 +18,11 @@ use render::{
 
 use crate::compat::ToHalType;
 
-use super::{attachment::AttachmentIndex, builder::GfxGraphBuilder, GfxGraph};
+use super::{
+    attachment::{AttachmentIndex, GfxGraphAttachment},
+    builder::GfxGraphBuilder,
+    GfxGraph,
+};
 
 //
 // Custom Gfx Related Graph Nodes
@@ -37,7 +42,7 @@ pub struct GfxPassNode<B: Backend> {
 pub(super) fn build_node<B: Backend>(
     ctx: &B::Device,
     node: Node<GfxGraphBuilder<B>>,
-    attachments: &Arena<GraphAttachment>,
+    attachments: &Vec<GfxGraphAttachment<B>>,
     surface_format: TextureFormat,
 ) -> GfxNode<B> {
     match node {
@@ -48,18 +53,19 @@ pub(super) fn build_node<B: Backend>(
 }
 
 fn build_attachment<B: Backend>(
-    attachments: &Arena<GraphAttachment>,
-    index: Index,
+    attachments: &Vec<GfxGraphAttachment<B>>,
+    index: Uuid,
     load: LoadOp,
     store: StoreOp,
     layouts: Range<Layout>,
 ) -> Attachment {
     let graph_attachment = attachments
-        .get(index)
+        .iter()
+        .find(|a| a.desc.id == index)
         .expect("[PassNodeBuilder] failed to find output attachment");
 
     Attachment {
-        format: Some(graph_attachment.format.clone().convert()),
+        format: Some(graph_attachment.desc.format.clone().convert()),
         // TODO: Multisampling
         samples: 1u8,
         ops: AttachmentOps::new(load.convert(), store.convert()),
@@ -71,7 +77,7 @@ fn build_attachment<B: Backend>(
 fn build_pass_node<B: Backend>(
     ctx: &B::Device,
     mut node: PassNode<GfxGraphBuilder<B>>,
-    graph_attachments: &Arena<GraphAttachment>,
+    graph_attachments: &Vec<GfxGraphAttachment<B>>,
     surface_format: TextureFormat,
 ) -> GfxPassNode<B> {
     // ctx.create_render_pass(attachments, subpasses, dependencies);
@@ -120,7 +126,7 @@ fn build_pass_node<B: Backend>(
                 index,
                 a.load.clone(),
                 a.store.clone(),
-                Layout::DepthStencilAttachmentOptimal..Layout::DepthStencilAttachmentOptimal,
+                Layout::Undefined..Layout::DepthStencilAttachmentOptimal,
             ),
             AttachmentIndex::Backbuffer => {
                 panic!("Backbuffer as depth attachment in graph is not allowed")
@@ -159,7 +165,7 @@ fn build_pass_node<B: Backend>(
             .expect("Failed to build PassNode")
     };
 
-    node.callbacks.init(&render_pass);
+    node.callbacks.borrow_mut().init(&render_pass);
 
     GfxPassNode {
         graph_node: node,

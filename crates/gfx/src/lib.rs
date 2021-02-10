@@ -1,4 +1,6 @@
 #![feature(is_sorted)]
+#![feature(trait_alias)]
+#![feature(associated_type_bounds)]
 
 pub mod command;
 pub(crate) mod compat;

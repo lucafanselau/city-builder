@@ -153,6 +153,13 @@ pub struct DepthDescriptor {
     pub write: bool,
 }
 
+impl DepthDescriptor {
+    pub const LESS: Self = Self {
+        function: ComparisonFunction::Less,
+        write: true,
+    };
+}
+
 #[derive(Debug)]
 pub enum PipelineState<T: Debug> {
     Baked(T),
@@ -195,6 +202,13 @@ pub struct Viewport {
 pub struct PipelineStates {
     pub viewport: PipelineState<Viewport>,
     pub scissor: PipelineState<Rect>,
+}
+
+impl PipelineStates {
+    pub const DYNAMIC: Self = Self {
+        viewport: PipelineState::Dynamic,
+        scissor: PipelineState::Dynamic,
+    };
 }
 
 #[derive(Debug, Clone)]

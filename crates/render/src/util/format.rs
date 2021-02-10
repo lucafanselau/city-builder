@@ -1,5 +1,5 @@
 // This is like a straight copy from wgpu (if we need more we can add those later)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TextureFormat {
     R8Unorm,
     R8Snorm,
@@ -36,6 +36,12 @@ pub enum TextureFormat {
     Rgba32Sfloat,
     Depth32Sfloat,
     Depth24PlusStencil8,
+}
+
+impl TextureFormat {
+    pub fn has_stencil(&self) -> bool {
+        self == &TextureFormat::Depth24PlusStencil8
+    }
 }
 
 /// This is basically a copy from gfx-hal

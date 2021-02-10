@@ -29,6 +29,13 @@ impl MaterialComponent {
         shininess: 0.078125,
     });
 
+    pub const BRONZE: Self = Self::Solid(SolidMaterial {
+        ambient: glam::const_vec3a!([1.0, 0.5, 0.31]),
+        diffuse: glam::const_vec3a!([1.0, 0.5, 0.31]),
+        specular: glam::const_vec3a!([0.5, 0.5, 0.5]),
+        shininess: 32.0,
+    });
+
     pub fn solid(ambient: Vec3, diffuse: Vec3, specular: Vec3, shininess: f32) -> Self {
         Self::Solid(SolidMaterial {
             ambient: ambient.into(),

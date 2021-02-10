@@ -24,7 +24,7 @@ pub struct Camera {
 }
 
 const UP: glam::Vec3 = glam::const_vec3!([0.0, 1.0, 0.0]);
-const SENSITIVITY: f32 = 0.3;
+const SENSITIVITY: f32 = 0.6;
 const MOVEMENT_SENSITIVITY: f32 = 0.5;
 
 impl Camera {

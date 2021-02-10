@@ -169,7 +169,7 @@ impl<B: Backend> GpuBuilder for GfxBuilder<B> {
             adapter,
             device,
             queues,
-            heapy,
+            heapy: Arc::new(heapy),
             plumber,
             pool,
         }

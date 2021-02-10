@@ -29,17 +29,19 @@ use render::{
 use crate::{
     compat::ToHalType,
     context::{GfxContext, Queues},
+    heapy::Heapy,
 };
 
 use super::{
-    attachment::AttachmentIndex, nodes::GfxNode, FrameStatus, FrameSynchronization, GfxGraph,
-    GraphData,
+    attachment::{AttachmentIndex, GfxGraphAttachment},
+    nodes::GfxNode,
+    FrameStatus, FrameSynchronization, GfxGraph, GraphData,
 };
 
 pub struct GfxGraphBuilder<B: Backend> {
     data: GraphData<B>,
-    attachments: Arena<GraphAttachment>,
-    nodes: Arena<Node<Self>>,
+    attachments: Vec<GraphAttachment>,
+    nodes: Vec<Node<Self>>,
 }
 
 impl<B: Backend> GfxGraphBuilder<B> {
@@ -49,6 +51,7 @@ impl<B: Backend> GfxGraphBuilder<B> {
         extent: Extent2D,
         adapter: Arc<Adapter<B>>,
         queues: Arc<Queues<B>>,
+        heapy: Arc<Heapy<B>>,
     ) -> Self {
         let surface_format = {
             use crate::compat::FromHalType;
@@ -95,6 +98,7 @@ impl<B: Backend> GfxGraphBuilder<B> {
             surface,
             adapter,
             queues,
+            heapy,
             depth_format,
             surface_format,
             surface_extent: RwLock::new(extent),
@@ -116,11 +120,13 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
     type Graph = GfxGraph<B>;
 
     fn add_node(&mut self, node: Node<Self>) {
-        self.nodes.insert(node);
+        self.nodes.push(node);
     }
 
     fn add_attachment(&mut self, attachment: GraphAttachment) -> Self::AttachmentIndex {
-        AttachmentIndex::Custom(self.attachments.insert(attachment))
+        let id = attachment.id;
+        self.attachments.push(attachment);
+        AttachmentIndex::Custom(id)
     }
 
     fn attachment_index(
@@ -129,8 +135,8 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
     ) -> Option<Self::AttachmentIndex> {
         self.attachments
             .iter()
-            .find(|(i, a)| a.name == name)
-            .map(|(i, a)| AttachmentIndex::Custom(i))
+            .find(|a| a.name == name)
+            .map(|a| AttachmentIndex::Custom(a.id))
     }
 
     fn get_backbuffer_attachment(&self) -> Self::AttachmentIndex {
@@ -166,9 +172,24 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
             }
         }
 
+        let dimensions = data.surface_extent.read().clone();
+
+        let attachments: Vec<GfxGraphAttachment<B>> = attachments
+            .into_iter()
+            .map(|a| {
+                GfxGraphAttachment::create(
+                    a,
+                    data.device.deref(),
+                    data.heapy.deref(),
+                    dimensions.clone(),
+                    nodes.iter(),
+                )
+            })
+            .collect();
+
         // TODO: Build attachments
         // Build nodes
-        let nodes: Arena<GfxNode<B>> = nodes
+        let nodes: Vec<GfxNode<B>> = nodes
             .into_iter()
             .map(|n| {
                 super::nodes::build_node(data.device.deref(), n, &attachments, data.surface_format)
@@ -183,5 +204,12 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
             current_frame: RwLock::new((0, FrameStatus::Inactive)),
             frames,
         }
+    }
+
+    fn build_pass_node<U: render::graph::nodes::callbacks::UserData>(
+        &self,
+        name: std::borrow::Cow<'static, str>,
+    ) -> render::graph::nodes::pass::PassNodeBuilder<Self, U> {
+        render::graph::nodes::pass::PassNodeBuilder::new(name)
     }
 }

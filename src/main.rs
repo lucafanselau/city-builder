@@ -16,7 +16,7 @@ fn spawner_plugin(app: &mut app::App) {
 
     let _entity = app.get_world_mut().spawn((
         artisan::components::MeshComponent(mesh_id),
-        artisan::material::MaterialComponent::YELLOW_RUBBER,
+        artisan::material::MaterialComponent::BRONZE,
     ));
 }
 

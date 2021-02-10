@@ -53,7 +53,7 @@ where
     pub(crate) adapter: Arc<gfx_hal::adapter::Adapter<B>>,
     pub(crate) queues: Arc<Queues<B>>,
     // Memory managment
-    pub(crate) heapy: Heapy<B>,
+    pub(crate) heapy: Arc<Heapy<B>>,
     // Pipelines
     pub(crate) plumber: Plumber<B>,
     // DEPRECATED: Swapchain
@@ -278,6 +278,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
             extent,
             self.adapter.clone(),
             self.queues.clone(),
+            self.heapy.clone(),
         )
     }
 }

@@ -11,7 +11,7 @@ use super::{
 
 pub trait GraphBuilder {
     type Context: GpuContext;
-    type AttachmentIndex: Clone;
+    type AttachmentIndex: Clone + Copy;
     type Graph: Graph;
 
     fn add_node(&mut self, node: Node<Self>);

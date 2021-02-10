@@ -1,4 +1,7 @@
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    cell::{Cell, RefCell},
+};
 
 use crate::{
     graph::{builder::GraphBuilder, Graph},
@@ -8,7 +11,7 @@ use crate::{
 use super::callbacks::{InitCallback, PassCallback, PassCallbacks, PassCallbacksImpl, UserData};
 
 #[derive(Clone)]
-pub struct PassAttachment<I: Clone> {
+pub struct PassAttachment<I: Clone + Copy> {
     pub index: I,
     pub load: LoadOp,
     pub store: StoreOp,
@@ -19,7 +22,7 @@ pub struct PassNode<G: GraphBuilder + ?Sized> {
     pub output_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
     pub input_attachments: Vec<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
     pub depth_attachment: Option<PassAttachment<<G as GraphBuilder>::AttachmentIndex>>,
-    pub callbacks: Box<dyn PassCallbacks<<G as GraphBuilder>::Context>>,
+    pub callbacks: RefCell<Box<dyn PassCallbacks<<G as GraphBuilder>::Context>>>,
 }
 
 // impl<Context: 'static + GpuContext, U: Send + Sync + 'static> Node for PassNode<Context, U> {
@@ -134,7 +137,7 @@ impl<G: GraphBuilder + ?Sized, U: UserData> PassNodeBuilder<G, U> {
             output_attachments: self.output_attachments.drain(..).collect(),
             input_attachments: self.input_attachments.drain(..).collect(),
             depth_attachment: self.depth_attachment.take(),
-            callbacks: Box::new(callbacks),
+            callbacks: RefCell::new(Box::new(callbacks)),
         }
     }
 }

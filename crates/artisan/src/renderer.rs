@@ -17,8 +17,8 @@ use render::{
     resource::{
         frame::Extent2D,
         pipeline::{
-            GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates, Primitive,
-            Rasterizer, RenderContext as PipelineRenderContext,
+            DepthDescriptor, GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates,
+            Primitive, Rasterizer, RenderContext as PipelineRenderContext,
         },
         render_pass::{LoadOp, StoreOp},
     },
@@ -157,7 +157,7 @@ pub fn init(app: &mut App) {
             let mut builder = graph_builder
                 .build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
-            // builder.set_depth()
+            builder.set_depth(depth_attachment, LoadOp::Clear, StoreOp::DontCare);
             builder.init(Box::new(move |rp| {
                 // let _ctx = ctx.clone();
                 let (buffer_descriptor, attributes) = Vertex::get_layout();
@@ -178,11 +178,8 @@ pub fn init(app: &mut App) {
                     attributes,
                     primitive: Primitive::TriangleList,
                     blend_targets: vec![true],
-                    depth: None,
-                    pipeline_states: PipelineStates {
-                        viewport: PipelineState::Dynamic,
-                        scissor: PipelineState::Dynamic,
-                    },
+                    depth: Some(DepthDescriptor::LESS),
+                    pipeline_states: PipelineStates::DYNAMIC,
                 };
 
                 let pipeline = resources

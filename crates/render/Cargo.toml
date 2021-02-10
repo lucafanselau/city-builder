@@ -15,3 +15,5 @@ thiserror = "1.0.20"
 anyhow = "1.0.33"
 bytemuck = { version =  "1.4.1", features = ["derive"] }
 raw-window-handle = "0.3.3"
+# Currently only used for graph attachments
+uuid = { version = "0.8.2", features = ["v4"] }

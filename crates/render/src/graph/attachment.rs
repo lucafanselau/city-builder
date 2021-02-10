@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 
+use uuid::Uuid;
+
 use crate::util::format::{ImageTiling, TextureFormat};
 
 #[derive(Debug, Clone)]
@@ -14,12 +16,16 @@ impl AttachmentSize {
 
 #[derive(Debug)]
 pub struct GraphAttachment {
+    // Note definitly not a perfect solution but should work for now
+    pub id: Uuid,
     pub name: Cow<'static, str>,
     pub size: AttachmentSize,
     pub format: TextureFormat,
     pub is_backbuffer: bool,
     pub tiling: ImageTiling,
 }
+
+impl GraphAttachment {}
 
 impl GraphAttachment {
     pub fn new(
@@ -28,6 +34,7 @@ impl GraphAttachment {
         format: TextureFormat,
     ) -> Self {
         Self {
+            id: Uuid::new_v4(),
             name: name.into(),
             size,
             format,

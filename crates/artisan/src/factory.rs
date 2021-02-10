@@ -32,157 +32,52 @@ pub fn circle(r: f32, resolution: u32) -> Vec<Vertex> {
 }
 
 pub fn unit_cube() -> Vec<Vertex> {
+    log::info!(
+        "[1, 2, 3] * [17, 23, 5] = {}",
+        glam::vec3(1.0, 2.0, 3.0) * glam::vec3(17.0, 23.0, 5.0)
+    );
     cube(glam::vec3(1f32, 1f32, 1f32))
 }
 
+const UP: glam::Vec3 = glam::const_vec3!([0.0, 1.0, 0.0]);
 pub fn cube(scale: glam::Vec3) -> Vec<Vertex> {
-    let x = scale.x / 2f32;
-    let y = scale.y / 2f32;
-    let z = scale.z / 2f32;
-    vec![
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, -z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(0.0, 0.0, -1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, -z),
-            normal: glam::vec3(-1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, -z),
-            normal: glam::vec3(0.0, -1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, -y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, -z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, -z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, -z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, z),
-            normal: glam::vec3(1.0, 0.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, -z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, -z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, -z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, z),
-            normal: glam::vec3(0.0, 1.0, 0.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            pos: glam::vec3(-x, y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-        Vertex {
-            pos: glam::vec3(x, -y, z),
-            normal: glam::vec3(0.0, 0.0, 1.0),
-        },
-    ]
+    let scale = 0.5 * scale;
+
+    let mut vertices = Vec::with_capacity(36);
+
+    let mut calc_from_norm = |norm: glam::Vec3, orthogonal: glam::Vec3| {
+        let base = norm * scale;
+        let orthogonal = orthogonal * scale;
+
+        let right = (base.cross(orthogonal)).normalize() * scale;
+
+        let vec = |a: f32, b: f32| -> Vertex {
+            Vertex {
+                pos: base + (a * right + b * orthogonal),
+                normal: norm,
+            }
+        };
+
+        // First triangle
+        vertices.push(vec(-1.0, 1.0));
+        vertices.push(vec(-1.0, -1.0));
+        vertices.push(vec(1.0, -1.0));
+
+        // second triangle
+        vertices.push(vec(-1.0, 1.0));
+        vertices.push(vec(1.0, -1.0));
+        vertices.push(vec(1.0, 1.0));
+    };
+
+    // X Normals
+    calc_from_norm(glam::vec3(1.0, 0.0, 0.0), UP);
+    calc_from_norm(glam::vec3(-1.0, 0.0, 0.0), UP);
+    // Z Normals
+    calc_from_norm(glam::vec3(0.0, 0.0, 1.0), UP);
+    calc_from_norm(glam::vec3(0.0, 0.0, -1.0), UP);
+    // Y Normals
+    calc_from_norm(glam::vec3(0.0, 1.0, 0.0), glam::vec3(1.0, 0.0, 0.0));
+    calc_from_norm(glam::vec3(0.0, -1.0, 0.0), glam::vec3(1.0, 0.0, 0.0));
+
+    vertices
 }

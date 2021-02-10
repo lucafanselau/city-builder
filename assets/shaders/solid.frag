@@ -20,18 +20,24 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
     // ambient
-    vec3 ambient = 0.05 * material.ambient;
+    vec3 ambient = 0.1 * material.ambient;
     // diffuse
     vec3 light_dir = normalize(light.light_position - pass_fragment_position);
     vec3 normal = normalize(pass_normal);
     float diff = max(dot(light_dir, normal), 0.0);
     vec3 diffuse = diff * material.diffuse;
     // specular
+    // blinn-phong
+    // vec3 view_dir = normalize(light.view_position - pass_fragment_position);
+    // vec3 reflect_dir = reflect(-light_dir, normal);
+    // vec3 halfway_dir = normalize(light_dir + view_dir);  
+    // float spec = pow(max(dot(normal, halfway_dir), 0.0), material.shininess);
+    // vec3 specular = material.specular * spec; // assuming bright white light color
+    // just blinn
     vec3 view_dir = normalize(light.view_position - pass_fragment_position);
-    vec3 reflect_dir = reflect(-light_dir, normal);
-    vec3 halfway_dir = normalize(light_dir + view_dir);  
-    float spec = pow(max(dot(normal, halfway_dir), 0.0), material.shininess);
-    vec3 specular = material.specular * spec; // assuming bright white light color
-                                              // 
+    vec3 reflect_dir = reflect(-light_dir, normal);  
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess);
+    vec3 specular = spec * material.specular;
+    
     out_color = vec4(ambient + diffuse + specular, 1.0);
 }

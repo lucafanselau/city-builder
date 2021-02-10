@@ -1,5 +1,5 @@
 use std::{
-    borrow::{Borrow, Cow},
+    borrow::{Borrow, BorrowMut, Cow},
     convert::TryInto,
     mem::ManuallyDrop,
     ops::Deref,
@@ -38,10 +38,15 @@ use crate::{
     command::GfxCommand,
     compat::ToHalType,
     context::{GfxContext, Queues},
+    heapy::Heapy,
 };
 
 pub mod attachment;
-use self::{attachment::AttachmentIndex, builder::GfxGraphBuilder, nodes::GfxNode};
+use self::{
+    attachment::{AttachmentIndex, GfxGraphAttachment},
+    builder::GfxGraphBuilder,
+    nodes::GfxNode,
+};
 
 pub mod builder;
 pub mod nodes;
@@ -79,6 +84,7 @@ pub struct GraphData<B: Backend> {
     surface: Arc<Mutex<B::Surface>>,
     adapter: Arc<Adapter<B>>,
     queues: Arc<Queues<B>>,
+    heapy: Arc<Heapy<B>>,
 
     // Static swapchain data
     depth_format: TextureFormat,
@@ -90,8 +96,8 @@ pub struct GraphData<B: Backend> {
 }
 
 pub struct GfxGraph<B: Backend> {
-    attachments: Arena<GraphAttachment>,
-    nodes: Arena<GfxNode<B>>,
+    attachments: Vec<GfxGraphAttachment<B>>,
+    nodes: Vec<GfxNode<B>>,
 
     data: GraphData<B>,
 
@@ -230,7 +236,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
 
         p.step("Configure Swapchain");
 
-        let (index, image) = match self.new_frame() {
+        let (index, swapchain_image) = match self.new_frame() {
             Ok(i) => i,
             Err(e) => {
                 log::warn!("Ignorable error happened during new frame");
@@ -261,7 +267,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
             };
 
             // TODO: Execute all passes
-            for (_node_index, node) in self.nodes.iter_mut() {
+            for node in self.nodes.iter() {
                 // TODO: Expand to diffrent nodes
                 let GfxNode::PassNode(node) = node;
                 let framebuffer = unsafe {
@@ -271,9 +277,14 @@ impl<B: Backend> Graph for GfxGraph<B> {
                         attachments.push(a.clone())
                     };
                     let attachments = attachments.iter().map(|a| match a.index {
-                        AttachmentIndex::Backbuffer => image.borrow(),
-                        AttachmentIndex::Custom(_) => {
-                            unimplemented!()
+                        AttachmentIndex::Backbuffer => swapchain_image.borrow(),
+                        AttachmentIndex::Custom(id) => {
+                            &self
+                                .attachments
+                                .iter()
+                                .find(|a| a.desc.id == id)
+                                .expect("[GfxGraph] (execute) failed to load custom attachment")
+                                .image_view
                         }
                     });
                     self.data
@@ -297,7 +308,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     &framebuffer,
                     viewport.clone().rect,
                     // TODO: Clear Values
-                    vec![Clear::Color(0.2, 0.5, 0.1, 1.0)],
+                    vec![Clear::Color(0.2, 0.5, 0.1, 1.0), Clear::Depth(1.0, 0)],
                 );
 
                 // Execute Callback
@@ -306,7 +317,10 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     frame_index: index,
                     viewport: viewport.clone(),
                 };
-                node.graph_node.callbacks.run(frame_data, world, resources);
+                node.graph_node
+                    .callbacks
+                    .borrow_mut()
+                    .run(frame_data, world, resources);
                 // and end render pass
                 gfx_command.end_render_pass()
             }
@@ -362,8 +376,11 @@ impl<B: Backend> Graph for GfxGraph<B> {
             p.step("Acquire Surface");
 
             // NOTE(luca): Currently we do not think about suboptimal swapchains
-            let result =
-                graphics_queue.present(surface, image, Some(&this_frame.rendering_complete));
+            let result = graphics_queue.present(
+                surface,
+                swapchain_image,
+                Some(&this_frame.rendering_complete),
+            );
 
             p.step("Present Call");
 
