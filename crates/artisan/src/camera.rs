@@ -29,7 +29,15 @@ const MOVEMENT_SENSITIVITY: f32 = 0.5;
 
 impl Camera {
     pub fn calc(&self, aspect_ratio: f32) -> CameraBuffer {
-        let projection = glam::Mat4::perspective_rh(45f32.to_radians(), aspect_ratio, 0.1, 10.0);
+        let projection = {
+            let initial = glam::Mat4::perspective_rh(45f32.to_radians(), aspect_ratio, 0.1, 10.0);
+            //log::info!("initial: {}", initial);
+            let mut array = initial.to_cols_array();
+            array[5] *= -1.0;
+            glam::Mat4::from_cols_array(&array)
+        };
+        //log::info!("projection: {}", projection);
+
         let view = glam::Mat4::look_at_rh(self.eye, self.eye + self.dir, UP);
 
         CameraBuffer {

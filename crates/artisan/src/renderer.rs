@@ -1,6 +1,6 @@
-use std::{any::TypeId, path::Path, sync::Arc, time::Instant};
+use std::{any::TypeId, cell::Ref, path::Path, sync::Arc, time::Instant};
 
-use app::{App, IntoMutatingSystem, Resources, World};
+use app::{App, IntoMutatingSystem, Resources, Timing, World};
 use bytemuck::{Pod, Zeroable};
 use gfx::context::ContextBuilder as GfxContextBuilder;
 use glam::Vec3A;
@@ -194,8 +194,10 @@ pub fn init(app: &mut App) {
                 } = frame;
 
                 {
+                    // Query needed resources
+                    let (camera, timing): (Ref<Camera>, Ref<Timing>) =
+                        resources.query::<(Ref<Camera>, Ref<Timing>)>()?;
                     // Calculate new camera
-                    let camera = resources.get::<Camera>().unwrap();
                     let camera_data = {
                         let aspect_ratio = viewport.rect.width as f32 / viewport.rect.height as f32;
                         camera.calc(aspect_ratio)
@@ -203,8 +205,13 @@ pub fn init(app: &mut App) {
                     camera_buffer.write(camera_data);
                     camera_buffer.frame(frame_index);
                     // Update Light Buffer
+                    let light_position = glam::vec3a(
+                        timing.total_elapsed().sin() * 10.0,
+                        10.0,
+                        timing.total_elapsed().cos() * 10.0,
+                    );
                     let light_data = Light {
-                        light_position: LIGHT_POSITION,
+                        light_position,
                         view_position: camera.eye.into(),
                     };
                     light_buffer.write(light_data);
@@ -239,6 +246,7 @@ pub fn init(app: &mut App) {
                         unimplemented!();
                     }
                 }
+                Ok(())
             }));
             graph_builder.add_node(Node::PassNode(builder.build()))
         }

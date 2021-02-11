@@ -2,6 +2,8 @@ use crate::resource::{Resource, Resources};
 use std::cell::{Ref, RefMut};
 use std::marker::PhantomData;
 
+use super::GetResourceError;
+
 pub trait ResourceQuery {
     type Creator: for<'a> ResourceCreator<'a>;
 }
@@ -9,7 +11,7 @@ pub trait ResourceQuery {
 pub trait ResourceCreator<'a> {
     type Item;
 
-    fn create(resources: &'a Resources) -> Option<Self::Item>;
+    fn create(resources: &'a Resources) -> Result<Self::Item, GetResourceError>;
 }
 
 impl<'a, R> ResourceQuery for Ref<'a, R>
@@ -24,8 +26,8 @@ pub struct ImmutableResourceCreator<R: Resource>(PhantomData<R>);
 impl<'a, R: Resource> ResourceCreator<'a> for ImmutableResourceCreator<R> {
     type Item = Ref<'a, R>;
 
-    fn create(resources: &'a Resources) -> Option<Self::Item> {
-        resources.get::<R>().ok()
+    fn create(resources: &'a Resources) -> Result<Self::Item, GetResourceError> {
+        resources.get::<R>()
     }
 }
 
@@ -38,8 +40,8 @@ pub struct MutableResourceCreator<R: Resource>(PhantomData<R>);
 impl<'a, R: Resource> ResourceCreator<'a> for MutableResourceCreator<R> {
     type Item = RefMut<'a, R>;
 
-    fn create(resources: &'a Resources) -> Option<Self::Item> {
-        resources.get_mut::<R>().ok()
+    fn create(resources: &'a Resources) -> Result<Self::Item, GetResourceError> {
+        resources.get_mut::<R>()
     }
 }
 
@@ -51,8 +53,8 @@ macro_rules! impl_query_tuple {
             );
 
             #[allow(unused_variables)]
-            fn create(resources: &'a Resources) -> Option<Self::Item> {
-                Some((
+            fn create(resources: &'a Resources) -> Result<Self::Item, GetResourceError> {
+                Ok((
                     $($R::Creator::create(resources)?,)*
                 ))
             }

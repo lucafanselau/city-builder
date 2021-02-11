@@ -13,12 +13,17 @@ pub struct FrameData<'a, Context: GpuContext> {
 pub trait InitCallback<Context: GpuContext, U> =
     Fn(&<Context as GpuContext>::RenderPassHandle) -> Box<U>;
 pub trait PassCallback<Context: GpuContext, U> =
-    FnMut(FrameData<'_, Context>, &U, &World, &Resources);
+    FnMut(FrameData<'_, Context>, &U, &World, &Resources) -> anyhow::Result<()>;
 pub trait UserData = Send + Sync + 'static;
 
 pub trait PassCallbacks<Context: GpuContext> {
     fn init(&mut self, render_pass: &<Context as GpuContext>::RenderPassHandle);
-    fn run(&mut self, data: FrameData<Context>, world: &World, resources: &Resources);
+    fn run(
+        &mut self,
+        data: FrameData<Context>,
+        world: &World,
+        resources: &Resources,
+    ) -> anyhow::Result<()>;
 }
 
 pub struct PassCallbacksImpl<Context: GpuContext, U: UserData + ?Sized> {
@@ -45,11 +50,16 @@ impl<Context: GpuContext, U: UserData> PassCallbacks<Context> for PassCallbacksI
         self.user_data = Some(self.init.deref()(render_pass));
     }
 
-    fn run(&mut self, frame_data: FrameData<Context>, world: &World, resources: &Resources) {
+    fn run(
+        &mut self,
+        frame_data: FrameData<Context>,
+        world: &World,
+        resources: &Resources,
+    ) -> anyhow::Result<()> {
         let data = self
             .user_data
             .as_ref()
             .expect("[PassCallbacks] no user data, did u call init for this pass?");
-        self.runner.deref_mut()(frame_data, data, world, resources);
+        self.runner.deref_mut()(frame_data, data, world, resources)
     }
 }

@@ -182,7 +182,9 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
                     data.device.deref(),
                     data.heapy.deref(),
                     dimensions.clone(),
-                    nodes.iter(),
+                    nodes.iter().map(|n| match n {
+                        Node::PassNode(n) => n,
+                    }),
                 )
             })
             .collect();

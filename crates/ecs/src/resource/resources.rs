@@ -80,7 +80,7 @@ impl Resources {
     // TODO: Return type
     pub fn query<Q: ResourceQuery>(
         &self,
-    ) -> Option<<<Q as ResourceQuery>::Creator as ResourceCreator>::Item> {
+    ) -> Result<<<Q as ResourceQuery>::Creator as ResourceCreator>::Item, GetResourceError> {
         <Q as ResourceQuery>::Creator::create(&self)
     }
 }

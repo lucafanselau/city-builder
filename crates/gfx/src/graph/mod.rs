@@ -220,12 +220,25 @@ impl<B: Backend> Graph for GfxGraph<B> {
 
             // Get the last window extent
             if let Some(&window::events::WindowResize(new_extent)) = resize_events.iter().last() {
-                *self.data.surface_extent.write() = Extent2D {
+                let new_dimension = Extent2D {
                     width: new_extent.width,
                     height: new_extent.height,
                 };
+                *self.data.surface_extent.write() = new_dimension.clone();
                 self.should_configure_swapchain
                     .store(true, Ordering::Relaxed);
+
+                // This will also force us to recreate custom attachments
+                for a in self.attachments.iter_mut() {
+                    a.rebuild(
+                        self.data.device.deref(),
+                        self.data.heapy.deref(),
+                        new_dimension.clone(),
+                        self.nodes.iter().map(|n| match n {
+                            GfxNode::PassNode(n) => &n.graph_node,
+                        }),
+                    );
+                }
             }
         }
 
@@ -317,10 +330,17 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     frame_index: index,
                     viewport: viewport.clone(),
                 };
-                node.graph_node
+                if let Err(e) = node
+                    .graph_node
                     .callbacks
                     .borrow_mut()
-                    .run(frame_data, world, resources);
+                    .run(frame_data, world, resources)
+                {
+                    panic!(
+                        "[GfxGraph] execution failed during pass node: {}, with error: {}",
+                        node.graph_node.name, e
+                    )
+                }
                 // and end render pass
                 gfx_command.end_render_pass()
             }

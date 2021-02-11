@@ -11,7 +11,7 @@ use render::{
     graph::{
         attachment::{AttachmentSize, GraphAttachment},
         node::Node,
-        nodes::pass::PassAttachment,
+        nodes::pass::{PassAttachment, PassNode},
     },
     prelude::MemoryType,
     resource::frame::Extent2D,
@@ -37,7 +37,7 @@ pub(crate) struct GfxGraphAttachment<B: Backend> {
     pub(crate) image_view: B::ImageView,
 }
 
-pub trait NodeIterator<B: Backend> = Iterator<Item: Borrow<Node<GfxGraphBuilder<B>>>>;
+pub trait NodeIterator<B: Backend> = Iterator<Item: Borrow<PassNode<GfxGraphBuilder<B>>>>;
 
 impl<B: Backend> GfxGraphAttachment<B> {
     pub fn create<I: NodeIterator<B>>(
@@ -59,10 +59,13 @@ impl<B: Backend> GfxGraphAttachment<B> {
     pub fn rebuild<I: NodeIterator<B>>(
         &mut self,
         device: &B::Device,
+        heapy: &Heapy<B>,
         dimension: Extent2D,
         nodes: I,
     ) {
-        todo!()
+        let (image, image_view) = Self::build(&self.desc, device, heapy, dimension, nodes);
+        self.image = image;
+        self.image_view = image_view;
     }
 
     fn build<I: NodeIterator<B>>(
@@ -75,29 +78,28 @@ impl<B: Backend> GfxGraphAttachment<B> {
         // Figure out usage
         let usage = {
             let mut res = Usage::empty();
-            nodes.for_each(|n| match n.borrow() {
-                Node::PassNode(node) => {
-                    let mut check_array = |a: &Vec<PassAttachment<AttachmentIndex>>,
-                                           usage: Usage| {
-                        if a.iter()
-                            .map(|a| a.index)
-                            .any(|i| i == AttachmentIndex::Custom(desc.id))
-                        {
-                            res |= usage
-                        }
-                    };
+            nodes.for_each(|n| {
+                let node = n.borrow();
 
-                    check_array(&node.output_attachments, Usage::COLOR_ATTACHMENT);
-                    check_array(&node.input_attachments, Usage::INPUT_ATTACHMENT);
-
-                    if node
-                        .depth_attachment
-                        .clone()
-                        .filter(|p| p.index == AttachmentIndex::Custom(desc.id))
-                        .is_some()
+                let mut check_array = |a: &Vec<PassAttachment<AttachmentIndex>>, usage: Usage| {
+                    if a.iter()
+                        .map(|a| a.index)
+                        .any(|i| i == AttachmentIndex::Custom(desc.id))
                     {
-                        res |= Usage::DEPTH_STENCIL_ATTACHMENT;
+                        res |= usage
                     }
+                };
+
+                check_array(&node.output_attachments, Usage::COLOR_ATTACHMENT);
+                check_array(&node.input_attachments, Usage::INPUT_ATTACHMENT);
+
+                if node
+                    .depth_attachment
+                    .clone()
+                    .filter(|p| p.index == AttachmentIndex::Custom(desc.id))
+                    .is_some()
+                {
+                    res |= Usage::DEPTH_STENCIL_ATTACHMENT;
                 }
             });
             res
