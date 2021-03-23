@@ -8,7 +8,7 @@ pub mod timing;
 pub use ecs::prelude::*;
 use ecs::{resource::Resource, system::MutatingSystem};
 use event::{Event, Events};
-use std::{any::type_name, borrow::Cow, cell::Ref};
+use std::{any::type_name, borrow::Cow};
 pub use timing::Timing;
 
 type Runner = Option<Box<dyn FnOnce(World, Resources, Scheduler)>>;
@@ -65,7 +65,7 @@ impl App {
         })
     }
 
-    pub fn get_res<T: Resource>(&self) -> Ref<T> {
+    pub fn get_res<T: Resource>(&self) -> Res<T> {
         self.resources.get::<T>().unwrap_or_else(|e| {
             let name = type_name::<T>();
             panic!(

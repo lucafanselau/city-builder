@@ -1,4 +1,4 @@
-use std::{any::TypeId, cell::Ref, path::Path, sync::Arc, time::Instant};
+use std::{cell::Ref, path::Path, sync::Arc};
 
 use app::{App, IntoMutatingSystem, Resources, Timing, World};
 use bytemuck::{Pod, Zeroable};
@@ -17,8 +17,8 @@ use render::{
     resource::{
         frame::Extent2D,
         pipeline::{
-            DepthDescriptor, GraphicsPipeline, PipelineShaders, PipelineState, PipelineStates,
-            Primitive, Rasterizer, RenderContext as PipelineRenderContext,
+            DepthDescriptor, GraphicsPipeline, PipelineShaders, PipelineStates, Primitive,
+            Rasterizer, RenderContext as PipelineRenderContext,
         },
         render_pass::{LoadOp, StoreOp},
     },
@@ -26,12 +26,14 @@ use render::{
 
 use crate::{
     camera::{Camera, CameraBuffer},
-    components::MeshComponent,
+    components::{MeshComponent, Transform},
     material::{MaterialComponent, SolidMaterial},
     mesh::{MeshMap, Vertex},
 };
 
 const LIGHT_POSITION: Vec3A = glam::const_vec3a!([10.0, 10.0, 10.0]);
+const MAT4_SIZE: u32 = std::mem::size_of::<glam::Mat4>() as _;
+const MATERIAL_SIZE: u32 = std::mem::size_of::<SolidMaterial>() as _;
 
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -160,14 +162,15 @@ pub fn init(app: &mut App) {
             builder.set_depth(depth_attachment, LoadOp::Clear, StoreOp::DontCare);
             builder.init(Box::new(move |rp| {
                 // let _ctx = ctx.clone();
+
                 let (buffer_descriptor, attributes) = Vertex::get_layout();
                 let desc = GraphicsPipelineDescriptor {
                     name: "simple_pipeline".into(),
                     mixtures: vec![&mixture],
-                    push_constants: vec![(
-                        ShaderType::Fragment,
-                        0..(std::mem::size_of::<SolidMaterial>() as _),
-                    )],
+                    push_constants: vec![
+                        (ShaderType::Vertex, 0..MAT4_SIZE),
+                        (ShaderType::Fragment, MAT4_SIZE..MAT4_SIZE + MATERIAL_SIZE),
+                    ],
                     shaders: PipelineShaders {
                         vertex: vertex_code.clone(),
                         fragment: fragment_code.clone(),
@@ -230,15 +233,22 @@ pub fn init(app: &mut App) {
 
                 cmd.snort_glue(0, &p, &glue_drops[frame_index as usize]);
 
-                for (_e, (mesh, mat)) in
-                    world.query::<(&MeshComponent, &MaterialComponent)>().iter()
+                for (_e, (mesh, mat, transform)) in world
+                    .query::<(&MeshComponent, &MaterialComponent, &Transform)>()
+                    .iter()
                 {
                     if let MaterialComponent::Solid(ref solid) = mat {
                         let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
 
-                        let push_data: &[u32] = bytemuck::cast_slice(bytemuck::bytes_of(solid));
+                        let model = transform.into_model();
+                        let vertex_push_data: &[u32] =
+                            bytemuck::cast_slice(bytemuck::bytes_of(&model));
+                        cmd.push_constants(&p, ShaderType::Vertex, 0, vertex_push_data);
+
+                        let fragment_push_data: &[u32] =
+                            bytemuck::cast_slice(bytemuck::bytes_of(solid));
                         // log::info!("Push Data is: \n{:#?}", push_data);
-                        cmd.push_constants(&p, ShaderType::Fragment, 0, push_data);
+                        cmd.push_constants(&p, ShaderType::Fragment, MAT4_SIZE, fragment_push_data);
 
                         cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
                         cmd.draw(0..vertex_count, 0..1);
@@ -264,54 +274,4 @@ fn frame_render(world: &mut World, resources: &mut Resources) {
         .expect("[Artisan] failed to get graph");
 
     graph.execute(world, resources);
-
-    // TODO: Execute graph
-
-    // let ctx = &render_context.ctx;
-
-    // let elapsed = timing.elapsed;
-    // let offset = Offset {
-    //     offset: [elapsed.sin(), elapsed.cos(), elapsed.tan(), 0.0],
-    // };
-    // state.offset_buffer.write(offset);
-
-    // let (index, swapchain_image) = ctx.new_frame();
-
-    // state.offset_buffer.frame(index);
-
-    // let extent = window.size;
-    // let framebuffer = ctx.create_framebuffer(
-    //     &state.render_pass,
-    //     vec![swapchain_image.borrow()],
-    //     Extent3D {
-    //         width: extent.width,
-    //         height: extent.height,
-    //         depth: 1,
-    //     },
-    // );
-
-    // let viewport = Viewport {
-    //     rect: Rect {
-    //         x: 0,
-    //         y: 0,
-    //         width: extent.width as i16,
-    //         height: extent.height as i16,
-    //     },
-    //     depth: 0.0..1.0,
-    // };
-
-    // let frame_commands = ctx.render_command(|cmd| {
-    //     cmd.begin_render_pass(
-    //         &state.render_pass,
-    //         &framebuffer,
-    //         viewport.clone().rect,
-    //         vec![Clear::Color(0.34, 0.12, 0.12, 1.0)],
-    //     );
-
-    //     cmd.end_render_pass();
-    // });
-
-    // ctx.end_frame(swapchain_image, frame_commands);
-
-    // ctx.drop_framebuffer(framebuffer);
 }

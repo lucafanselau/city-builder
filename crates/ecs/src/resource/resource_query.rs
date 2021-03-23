@@ -1,8 +1,11 @@
 use crate::resource::{Resource, Resources};
-use std::cell::{Ref, RefMut};
 use std::marker::PhantomData;
 
 use super::GetResourceError;
+
+// For now this is just a reexport of the std ref objects, we should probably thing about introducing our
+// own ref type
+pub use std::cell::{Ref, RefMut};
 
 pub trait ResourceQuery {
     type Creator: for<'a> ResourceCreator<'a>;

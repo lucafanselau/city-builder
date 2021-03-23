@@ -14,6 +14,8 @@ pub mod prelude {
         System,
     };
     pub use hecs::{QueryBorrow, World};
+    // Our resource ref type (should be replace sometime)
+    pub use std::cell::{Ref as Res, RefMut as ResMut};
 }
 
 // This whole thing is largely based on the bevy_ecs, since it seems to be quite a good ecs.

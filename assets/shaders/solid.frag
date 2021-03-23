@@ -5,10 +5,10 @@ layout (location = 0) in vec3 pass_normal;
 layout (location = 1) in vec3 pass_fragment_position;
 
 layout(push_constant, std430) uniform Material {
-    vec3 ambient;
-    vec3 diffuse;
-    vec3 specular;
-    layout (offset = 48) float shininess;
+    layout (offset = 64) vec3 ambient;
+    layout (offset = 80) vec3 diffuse;
+    layout (offset = 96) vec3 specular;
+    layout (offset = 112) float shininess;
 } material;
 
 layout(binding = 1) uniform Light {

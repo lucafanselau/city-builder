@@ -1,4 +1,4 @@
-use crate::mesh::Vertex;
+use crate::{mesh::Vertex, UP};
 
 pub fn circle(r: f32, resolution: u32) -> Vec<Vertex> {
     let mut result = Vec::new();
@@ -39,7 +39,6 @@ pub fn unit_cube() -> Vec<Vertex> {
     cube(glam::vec3(1f32, 1f32, 1f32))
 }
 
-const UP: glam::Vec3 = glam::const_vec3!([0.0, 1.0, 0.0]);
 pub fn cube(scale: glam::Vec3) -> Vec<Vertex> {
     let scale = 0.5 * scale;
 

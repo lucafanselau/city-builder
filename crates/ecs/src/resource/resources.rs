@@ -77,7 +77,11 @@ impl Resources {
         Ok(store.borrow_mut())
     }
 
-    // TODO: Return type
+    pub fn contains<T: Resource>(&self) -> bool {
+        let type_id = TypeId::of::<T>();
+        self.storage.contains_key(&type_id)
+    }
+
     pub fn query<Q: ResourceQuery>(
         &self,
     ) -> Result<<<Q as ResourceQuery>::Creator as ResourceCreator>::Item, GetResourceError> {

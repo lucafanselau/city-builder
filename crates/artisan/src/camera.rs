@@ -1,3 +1,4 @@
+use crate::UP;
 use app::{App, IntoFunctionSystem, Timing};
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, XY};
@@ -23,7 +24,6 @@ pub struct Camera {
     pitch: f32,
 }
 
-const UP: glam::Vec3 = glam::const_vec3!([0.0, 1.0, 0.0]);
 const SENSITIVITY: f32 = 0.6;
 const MOVEMENT_SENSITIVITY: f32 = 0.5;
 
