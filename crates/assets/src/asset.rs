@@ -1,18 +1,13 @@
 use std::any::Any;
 
 use async_channel::{unbounded, Receiver, Sender};
+use downcast_rs::{impl_downcast, DowncastSync};
 
 use crate::handle::{AssetHandle, AssetHandleUntyped};
 
-pub trait Asset: Any + Send + Sync {}
-impl<T: Any + Send + Sync> Asset for T {}
-unsafe fn cast_asset<A: Asset>(asset: Box<dyn Asset>) -> Box<A> {
-    // TODO: downcast_rs
-    // # Safety:
-    // Test if this is actually secure
-    let asset: Box<dyn Any + 'static> = std::mem::transmute(asset);
-    asset.downcast().expect("cast_asset error")
-}
+pub trait Asset: DowncastSync {}
+impl<T: DowncastSync> Asset for T {}
+impl_downcast!(sync Asset);
 
 #[derive(Clone, Debug)]
 pub struct AssetChannel {
@@ -37,19 +32,20 @@ impl AssetChannel {
             .expect("AsyncChannel failed to send")
     }
 
-    pub async unsafe fn receive<A: Asset>(&self) -> (AssetHandle<A>, Box<A>) {
-        let (id, a) = self
-            .receiver
+    pub async unsafe fn receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
+        self.receiver
             .recv()
             .await
-            .expect("AssetChannel failed to receive");
-        (id.typed(), cast_asset(a))
+            .ok()
+            .map(|(h, a)| a.downcast().ok().map(|v| (h.typed(), v)))
+            .flatten()
     }
 
     pub unsafe fn try_receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
         self.receiver
             .try_recv()
             .ok()
-            .map(|(id, a)| (id.typed(), cast_asset(a)))
+            .map(|(h, a)| a.downcast().ok().map(|v| (h.typed(), v)))
+            .flatten()
     }
 }

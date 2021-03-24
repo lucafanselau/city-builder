@@ -8,10 +8,12 @@ edition = "2018"
 
 [dependencies]
 core = { path = "../core" }
-app = { path = "../app" }
+ecs = { path  = "../ecs" }
 tasks = { path = "../tasks" }
 dashmap = "4.0.2"
 async-channel = "1.6.1"
 anyhow = "1.0.39"
 thiserror = "1.0.24"
 log = "0.4.14"
+hash_hasher = "2.0.3"
+downcast-rs = "1.2.0"

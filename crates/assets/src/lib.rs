@@ -1,36 +1,28 @@
 #![feature(trait_alias)]
 
-mod asset;
-mod asset_server;
-mod assets;
-mod def;
-mod handle;
-mod loader;
+pub mod asset;
+pub mod asset_server;
+pub mod assets;
+pub mod def;
+pub mod handle;
+pub mod loader;
 
-use app::App;
 pub use def::*;
-use tasks::*;
 
-pub fn init(app: &mut App) {
-    if !app.get_resources().contains::<ComputePool>() {
-        app.insert_resource(ComputePool::default());
-    }
-
-    if !app.get_resources().contains::<AsyncComputePool>() {
-        app.insert_resource(AsyncComputePool::default());
-    }
-
-    // Now that this is out of the way, we can create an asset server
+pub mod prelude {
+    pub use crate::{
+        asset::{Asset, AssetChannel},
+        asset_server::AssetServer,
+        assets::Assets,
+        def::BoxedFuture,
+        handle::AssetHandle,
+        loader::{AssetLoader, LoadContext},
+    };
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::RefCell,
-        path::{Path, PathBuf},
-        thread,
-        time::Duration,
-    };
+    use std::{cell::RefCell, thread, time::Duration};
 
     use assets::Assets;
 

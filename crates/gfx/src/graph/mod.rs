@@ -210,8 +210,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
     type Builder = GfxGraphBuilder<B>;
 
     fn execute(&mut self, world: &World, resources: &Resources) {
-        let mut p = core::profiler::Profiler::new("Execute Graph");
-
         {
             // Check for resize events
             let resize_events = resources
@@ -242,12 +240,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
             }
         }
 
-        p.step("Events");
-
         self.configure_swapchain()
             .expect("[GfxGraph] failed to configure swapchain");
-
-        p.step("Configure Swapchain");
 
         let (index, swapchain_image) = match self.new_frame() {
             Ok(i) => i,
@@ -258,8 +252,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
                 self.new_frame().unwrap()
             }
         };
-
-        p.step("New Frame");
 
         let command = {
             // create the command buffer
@@ -355,8 +347,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
             command
         };
 
-        p.step("Build Command Buffer");
-
         let frame_idx = {
             let mut current_frame = self.current_frame.write();
             match current_frame.1 {
@@ -375,8 +365,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
         let mut this_frame = self.frames.get(frame_idx as usize).unwrap().lock();
         let mut graphics_queue = self.data.queues.graphics.lock();
 
-        p.step("Acquire Locks");
-
         unsafe {
             let submission = Submission {
                 command_buffers: vec![&command],
@@ -386,14 +374,10 @@ impl<B: Backend> Graph for GfxGraph<B> {
             graphics_queue.submit(submission, Some(&this_frame.submission_fence));
         }
 
-        p.step("Submisson");
-
         this_frame.in_use_command = Some(command);
 
         unsafe {
             let surface = &mut self.data.surface.lock();
-
-            p.step("Acquire Surface");
 
             // NOTE(luca): Currently we do not think about suboptimal swapchains
             let result = graphics_queue.present(
@@ -402,8 +386,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
                 Some(&this_frame.rendering_complete),
             );
 
-            p.step("Present Call");
-
             if let Err(_e) = result {
                 // log::warn!("Recovarable Error happened");
                 // log::warn!("{:#?}", e);
@@ -411,8 +393,6 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     .store(true, Ordering::Relaxed);
             }
         }
-        p.step("Present");
-        // p.finish();
     }
 
     fn into_builder(self) -> Self::Builder {

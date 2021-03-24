@@ -9,7 +9,10 @@ pub use ecs::prelude::*;
 use ecs::{resource::Resource, system::MutatingSystem};
 use event::{Event, Events};
 use std::{any::type_name, borrow::Cow};
+use tasks::{AsyncComputePool, ComputePool};
 pub use timing::Timing;
+
+pub use assets::prelude::*;
 
 type Runner = Option<Box<dyn FnOnce(World, Resources, Scheduler)>>;
 
@@ -27,6 +30,20 @@ impl Default for App {
     }
 }
 
+fn init_app(app: &mut App) {
+    // First we need to insert the pools
+    if !app.get_resources().contains::<ComputePool>() {
+        app.insert_resource(ComputePool::default());
+    }
+
+    if !app.get_resources().contains::<AsyncComputePool>() {
+        let pool = AsyncComputePool::default();
+        app.insert_resource(pool.clone());
+        // Aaaaand then an asset server
+        app.insert_resource(AssetServer::new(pool));
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         let mut scheduler = Scheduler::new();
@@ -35,7 +52,8 @@ impl App {
             scheduler.add_stage(*stage);
         }
 
-        let default_plugins: Vec<Box<dyn FnOnce(&mut Self)>> = vec![Box::new(timing::init)];
+        let default_plugins: Vec<Box<dyn FnOnce(&mut Self)>> =
+            vec![Box::new(init_app), Box::new(timing::init)];
 
         Self {
             world: World::new(),
@@ -99,6 +117,21 @@ impl App {
             stages::UPDATE_EVENTS,
             Events::<T>::update_system.into_system(),
         );
+    }
+
+    pub fn register_asset<A: Asset>(&mut self) {
+        let assets = {
+            let server = self
+                .resources
+                .get::<AssetServer>()
+                .expect("[App] (register_asset) failed to get asset_server");
+            server.register_asset::<A>()
+        };
+        self.resources
+            .insert(assets)
+            .expect("[App] (register_asset) failed to insert assets");
+
+        // TODO: AssetEvents
     }
 
     pub fn set_runner<Func>(&mut self, runner: Func)

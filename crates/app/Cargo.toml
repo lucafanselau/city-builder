@@ -8,4 +8,6 @@ edition = "2018"
 
 [dependencies]
 ecs = { path = "../ecs" }
+assets = { path = "../assets" }
+tasks = { path = "../tasks" }
 log = "0.4.14"
