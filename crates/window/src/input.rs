@@ -2,7 +2,7 @@ use glam::Vec2;
 use std::cell::{Ref, RefMut};
 use winit::event::{ElementState, VirtualKeyCode};
 
-use app::{event::Events, stages, App, IntoFunctionSystem};
+use app::{stages, App, Events, IntoFunctionSystem};
 
 use crate::events::{CursorMoved, KeyboardInput};
 

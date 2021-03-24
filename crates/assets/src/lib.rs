@@ -4,6 +4,7 @@ pub mod asset;
 pub mod asset_server;
 pub mod assets;
 pub mod def;
+pub mod events;
 pub mod handle;
 pub mod loader;
 
@@ -15,6 +16,7 @@ pub mod prelude {
         asset_server::AssetServer,
         assets::Assets,
         def::BoxedFuture,
+        events::AssetEvent,
         handle::AssetHandle,
         loader::{AssetLoader, LoadContext},
     };

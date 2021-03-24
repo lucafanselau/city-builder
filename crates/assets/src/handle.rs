@@ -38,13 +38,21 @@ impl AssetPathId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AssetHandle<A: Asset> {
     id: AssetHandleId,
     _marker: std::marker::PhantomData<A>,
 }
 
 // region: manual eq, partial_eq and hash implementations for AssetHandle
+impl<A: Asset> Clone for AssetHandle<A> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            _marker: Default::default(),
+        }
+    }
+}
 impl<A: Asset> PartialEq for AssetHandle<A> {
     fn eq(&self, other: &Self) -> bool {
         self.id.eq(&other.id)

@@ -213,7 +213,7 @@ impl<B: Backend> Graph for GfxGraph<B> {
         {
             // Check for resize events
             let resize_events = resources
-                .get::<app::event::Events<window::events::WindowResize>>()
+                .get::<app::Events<window::events::WindowResize>>()
                 .expect("[GfxGraph] (execute) failed to get resize event");
 
             // Get the last window extent

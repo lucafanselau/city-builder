@@ -2,11 +2,13 @@
 // if there are drawbacks, we might need to remove that
 #![feature(trait_alias)]
 
+pub mod event;
 pub mod resource;
 pub mod schedule;
 pub mod system;
 
 pub mod prelude {
+    pub use crate::event::{Event, Events};
     pub use crate::resource::{ResourceQuery, Resources};
     pub use crate::schedule::{executor::SequentialExecutor, scheduler::Scheduler};
     pub use crate::system::{

@@ -1,13 +1,11 @@
 //! Provides an App struct, which basically ties all the loose ends together
 #![feature(trait_alias)]
 
-pub mod event;
 pub mod stages;
 pub mod timing;
 
 pub use ecs::prelude::*;
 use ecs::{resource::Resource, system::MutatingSystem};
-use event::{Event, Events};
 use std::{any::type_name, borrow::Cow};
 use tasks::{AsyncComputePool, ComputePool};
 pub use timing::Timing;
@@ -131,7 +129,13 @@ impl App {
             .insert(assets)
             .expect("[App] (register_asset) failed to insert assets");
 
-        // TODO: AssetEvents
+        // NOTE(luca): not quite sure if the stage is the best
+        self.scheduler.add_system_to_stage(
+            stages::PREPARE_FRAME,
+            Assets::<A>::update_system.into_system(),
+        );
+
+        self.add_event::<AssetEvent<A>>();
     }
 
     pub fn set_runner<Func>(&mut self, runner: Func)

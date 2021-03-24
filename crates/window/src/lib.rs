@@ -1,4 +1,4 @@
-use app::{event::Events, App};
+use app::{App, Events};
 use ecs::{prelude::*, schedule::executor::ScheduleExecutor};
 
 use log::info;
@@ -39,7 +39,7 @@ pub struct WindowState {
     pub size: PhysicalSize<u32>,
 }
 
-fn dispatch_event<T: app::event::Event>(r: &mut Resources, e: T) {
+fn dispatch_event<T: app::Event>(r: &mut Resources, e: T) {
     let mut events = r
         .get_mut::<Events<T>>()
         .expect("[Window] (dispatch_event) event is not registered");

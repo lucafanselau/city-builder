@@ -3,9 +3,10 @@ use std::hash::BuildHasherDefault;
 use crate::{
     asset::{Asset, AssetChannel},
     handle::AssetHandle,
+    prelude::AssetEvent,
 };
 use dashmap::{mapref::one::Ref, DashMap};
-use ecs::prelude::Res;
+use ecs::prelude::{Events, Res, ResMut};
 use hash_hasher::{HashBuildHasher, HashHasher};
 
 type Hasher = BuildHasherDefault<HashHasher>;
@@ -41,9 +42,12 @@ impl<A: Asset> Assets<A> {
     }
 
     // TODO: !! Events and Asset Destructuring
-    pub fn update_system(assets: Res<Self>) {
+    pub fn update_system(assets: Res<Self>, mut events: ResMut<Events<AssetEvent<A>>>) {
         while let Some((id, a)) = unsafe { assets.channel.try_receive::<A>() } {
-            assets.store.insert(id, *a);
+            match assets.store.insert(id.clone(), *a) {
+                Some(_) => events.send(AssetEvent::Updated(id)),
+                None => events.send(AssetEvent::Created(id)),
+            }
         }
     }
 }
