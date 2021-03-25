@@ -242,7 +242,7 @@ impl<B: Backend> Plumber<B> {
         Ok(binary_result.as_binary().to_vec())
     }
 
-    fn load_file(path: Cow<'static, Path>) -> String {
+    fn load_file(path: Cow<'_, Path>) -> String {
         use std::fs;
         fs::read_to_string(path).expect("[Plumber] failed to load shader file")
     }
@@ -273,7 +273,11 @@ impl<B: Backend> Plumber<B> {
                 self.compile_glsl(source.as_str(), shader_type, name)
                     .unwrap()
             }
-            ShaderSource::GlslSource((source, shader_type, name)) => self
+            ShaderSource::GlslSource {
+                source,
+                shader_type,
+                name,
+            } => self
                 .compile_glsl(source, shader_type, name.unwrap_or("unknown-inline-shader"))
                 .unwrap(),
             ShaderSource::Spirv(source) => source,

@@ -21,11 +21,11 @@ impl AssetChannel {
         Self { sender, receiver }
     }
 
-    pub(crate) async fn send<A: Asset + 'static>(&self, handle: AssetHandle<A>, a: A) {
+    pub async fn send<A: Asset + 'static>(&self, handle: AssetHandle<A>, a: A) {
         self.send_boxed(handle, Box::new(a)).await
     }
 
-    pub(crate) async fn send_boxed<A: Asset + 'static>(&self, handle: AssetHandle<A>, a: Box<A>) {
+    pub async fn send_boxed<A: Asset + 'static>(&self, handle: AssetHandle<A>, a: Box<A>) {
         self.sender
             .send((handle.untyped(), a))
             .await

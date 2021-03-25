@@ -2,7 +2,10 @@ use gfx_hal::Backend;
 use render::graph::nodes::pass::PassNode;
 use uuid::Uuid;
 
-use std::ops::{Deref, Range};
+use std::{
+    ops::{Deref, Range},
+    sync::Arc,
+};
 
 use generational_arena::{Arena, Index};
 use gfx_hal::{
@@ -36,7 +39,7 @@ pub(crate) enum GfxNode<B: Backend> {
 
 pub struct GfxPassNode<B: Backend> {
     pub(crate) graph_node: PassNode<GfxGraphBuilder<B>>,
-    pub(crate) render_pass: B::RenderPass,
+    pub(crate) render_pass: Arc<B::RenderPass>,
 }
 
 pub(super) fn build_node<B: Backend>(
@@ -160,12 +163,12 @@ fn build_pass_node<B: Backend>(
 
     let dependencies: Vec<SubpassDependency> = Vec::new();
 
-    let render_pass = unsafe {
+    let render_pass = Arc::new(unsafe {
         ctx.create_render_pass(attachments, &vec![subpass], dependencies)
             .expect("Failed to build PassNode")
-    };
+    });
 
-    node.callbacks.borrow_mut().init(&render_pass);
+    node.callbacks.borrow_mut().init(render_pass.clone());
 
     GfxPassNode {
         graph_node: node,

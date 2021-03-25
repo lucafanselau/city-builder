@@ -11,9 +11,13 @@ use std::sync::Arc;
 use super::glue::Mixture;
 
 #[derive(Debug)]
-pub enum ShaderSource {
-    GlslFile(Cow<'static, Path>),
-    GlslSource((&'static str, ShaderType, Option<&'static str>)),
+pub enum ShaderSource<'a> {
+    GlslFile(Cow<'a, Path>),
+    GlslSource {
+        source: &'a str,
+        shader_type: ShaderType,
+        name: Option<&'a str>,
+    },
     /// When used in compile shader this is a noop
     Spirv(Vec<u32>),
 }
@@ -27,10 +31,10 @@ pub enum ShaderType {
 }
 
 #[derive(Debug)]
-pub struct PipelineShaders<Context: GpuContext> {
-    pub vertex: <Context as GpuContext>::ShaderCode,
-    pub fragment: <Context as GpuContext>::ShaderCode,
-    pub geometry: Option<<Context as GpuContext>::ShaderCode>, // etc...
+pub struct PipelineShaders<'a, Context: GpuContext> {
+    pub vertex: &'a <Context as GpuContext>::ShaderCode,
+    pub fragment: &'a <Context as GpuContext>::ShaderCode,
+    pub geometry: Option<&'a <Context as GpuContext>::ShaderCode>, // etc...
 }
 
 #[derive(Debug, Clone)]
@@ -247,7 +251,7 @@ pub struct GraphicsPipelineDescriptor<'a, Context: GpuContext> {
     pub mixtures: Vec<&'a Mixture<Context>>,
     /// Push Constants
     pub push_constants: Vec<(ShaderType, Range<u32>)>,
-    pub shaders: PipelineShaders<Context>,
+    pub shaders: PipelineShaders<'a, Context>,
     /// TODO: Render Pass layout for this Pipeline
     pub rasterizer: Rasterizer,
     // This should an probably will be serialized?

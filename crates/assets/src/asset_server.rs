@@ -86,7 +86,7 @@ impl AssetServer {
         path: impl Into<String>,
     ) -> Result<AssetHandleUntyped, LoadAssetError> {
         let path_buf = {
-            let mut buf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let mut buf = PathBuf::new(); // from(env!("CARGO_MANIFEST_DIR"));
             buf.push(path.into());
             buf
         };

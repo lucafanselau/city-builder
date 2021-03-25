@@ -1,6 +1,6 @@
-use std::{cell::Ref, path::Path, sync::Arc};
+use std::{cell::Ref, ops::Deref, path::Path, sync::Arc};
 
-use app::{App, IntoMutatingSystem, Resources, Timing, World};
+use app::{App, AssetDescendant, IntoMutatingSystem, Resources, Timing, World};
 use bytemuck::{Pod, Zeroable};
 use gfx::context::ContextBuilder as GfxContextBuilder;
 use glam::Vec3A;
@@ -29,6 +29,7 @@ use crate::{
     components::{MeshComponent, Transform},
     material::{MaterialComponent, SolidMaterial},
     mesh::{MeshMap, Vertex},
+    shader_assets::ShaderAsset,
 };
 
 const LIGHT_POSITION: Vec3A = glam::const_vec3a!([10.0, 10.0, 10.0]);
@@ -75,6 +76,9 @@ pub fn init(app: &mut App) {
         (ctx, surface, initial_aspect_ratio)
     };
     let resources = Arc::new(GpuResources::new(ctx.clone()));
+
+    // Initialize shader asset
+    crate::shader_assets::init(app, ctx.clone());
 
     {
         // Insert MeshMap
@@ -123,16 +127,15 @@ pub fn init(app: &mut App) {
             // 2: "albedo" in Fragment: sampler
         ];
 
-        let mixture = resources.stir(parts);
+        let mixture = Arc::new(resources.stir(parts));
 
         // TODO: load that from file or something
-
-        let vertex_code = ctx.compile_shader(ShaderSource::GlslFile(
-            Path::new("assets/shaders/solid.vert").into(),
-        ));
-        let fragment_code = ctx.compile_shader(ShaderSource::GlslFile(
-            Path::new("assets/shaders/solid.frag").into(),
-        ));
+        let vertex_shader = app
+            .load_asset("assets/shaders/solid.vert")
+            .expect("failed to load solid vertex");
+        let fragment_shader = app
+            .load_asset("assets/shaders/solid.frag")
+            .expect("failed to load solid fragment");
 
         let mut glue_drops = Vec::with_capacity(frames_in_flight);
 
@@ -156,104 +159,122 @@ pub fn init(app: &mut App) {
         ));
 
         {
-            let mut builder = graph_builder
-                .build_pass_node::<GraphicsPipeline<ActiveContext>>("main_pass".into());
+            let mut builder = graph_builder.build_pass_node("main_pass".into());
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
             builder.set_depth(depth_attachment, LoadOp::Clear, StoreOp::DontCare);
-            builder.init(Box::new(move |rp| {
-                // let _ctx = ctx.clone();
+            let resources = resources.clone();
+            builder.init(Box::new(move |render_pass| {
+                let resources = resources.clone();
+                let vertex_shader = vertex_shader.clone();
+                let fragment_shader = fragment_shader.clone();
+                let mixture = mixture.clone();
+                let pipeline = AssetDescendant::<ShaderAsset, _>::new(
+                    move |assets| {
+                        let (buffer_descriptor, attributes) = Vertex::get_layout();
+                        let desc = GraphicsPipelineDescriptor {
+                            name: "simple_pipeline".into(),
+                            mixtures: vec![&mixture],
+                            push_constants: vec![
+                                (ShaderType::Vertex, 0..MAT4_SIZE),
+                                (ShaderType::Fragment, MAT4_SIZE..MAT4_SIZE + MATERIAL_SIZE),
+                            ],
+                            shaders: PipelineShaders {
+                                vertex: &assets[0].0,
+                                fragment: &assets[1].0,
+                                geometry: None,
+                            },
+                            rasterizer: Rasterizer::FILL,
+                            vertex_buffers: vec![buffer_descriptor],
+                            attributes,
+                            primitive: Primitive::TriangleList,
+                            blend_targets: vec![true],
+                            depth: Some(DepthDescriptor::LESS),
+                            pipeline_states: PipelineStates::DYNAMIC,
+                        };
 
-                let (buffer_descriptor, attributes) = Vertex::get_layout();
-                let desc = GraphicsPipelineDescriptor {
-                    name: "simple_pipeline".into(),
-                    mixtures: vec![&mixture],
-                    push_constants: vec![
-                        (ShaderType::Vertex, 0..MAT4_SIZE),
-                        (ShaderType::Fragment, MAT4_SIZE..MAT4_SIZE + MATERIAL_SIZE),
-                    ],
-                    shaders: PipelineShaders {
-                        vertex: vertex_code.clone(),
-                        fragment: fragment_code.clone(),
-                        geometry: None,
+                        resources.create_graphics_pipeline(
+                            desc,
+                            PipelineRenderContext::RenderPass((render_pass.deref(), 0)),
+                        )
                     },
-                    rasterizer: Rasterizer::FILL,
-                    vertex_buffers: vec![buffer_descriptor],
-                    attributes,
-                    primitive: Primitive::TriangleList,
-                    blend_targets: vec![true],
-                    depth: Some(DepthDescriptor::LESS),
-                    pipeline_states: PipelineStates::DYNAMIC,
-                };
+                    vec![vertex_shader, fragment_shader].as_slice(),
+                );
 
-                let pipeline = resources
-                    .create_graphics_pipeline(desc, PipelineRenderContext::RenderPass((rp, 0)));
                 Box::new(pipeline)
             }));
-            builder.callback(Box::new(move |frame, p, world, resources| {
-                let FrameData {
-                    cmd,
-                    frame_index,
-                    viewport,
-                } = frame;
+            builder.callback(Box::new(move |frame, pipeline, world, resources| {
+                if let Some(pipeline) = pipeline.get(resources) {
+                    let FrameData {
+                        cmd,
+                        frame_index,
+                        viewport,
+                    } = frame;
 
-                {
-                    // Query needed resources
-                    let (camera, timing): (Ref<Camera>, Ref<Timing>) =
-                        resources.query::<(Ref<Camera>, Ref<Timing>)>()?;
-                    // Calculate new camera
-                    let camera_data = {
-                        let aspect_ratio = viewport.rect.width as f32 / viewport.rect.height as f32;
-                        camera.calc(aspect_ratio)
-                    };
-                    camera_buffer.write(camera_data);
-                    camera_buffer.frame(frame_index);
-                    // Update Light Buffer
-                    let light_position = glam::vec3a(
-                        timing.total_elapsed().sin() * 10.0,
-                        10.0,
-                        timing.total_elapsed().cos() * 10.0,
-                    );
-                    let light_data = Light {
-                        light_position,
-                        view_position: camera.eye.into(),
-                    };
-                    light_buffer.write(light_data);
-                    light_buffer.frame(frame_index);
-                }
+                    {
+                        // Query needed resources
+                        let (camera, timing): (Ref<Camera>, Ref<Timing>) =
+                            resources.query::<(Ref<Camera>, Ref<Timing>)>()?;
+                        // Calculate new camera
+                        let camera_data = {
+                            let aspect_ratio =
+                                viewport.rect.width as f32 / viewport.rect.height as f32;
+                            camera.calc(aspect_ratio)
+                        };
+                        camera_buffer.write(camera_data);
+                        camera_buffer.frame(frame_index);
+                        // Update Light Buffer
+                        let light_position = glam::vec3a(
+                            timing.total_elapsed().sin() * 10.0,
+                            10.0,
+                            timing.total_elapsed().cos() * 10.0,
+                        );
+                        let light_data = Light {
+                            light_position,
+                            view_position: camera.eye.into(),
+                        };
+                        light_buffer.write(light_data);
+                        light_buffer.frame(frame_index);
+                    }
 
-                let mesh_map = resources
-                    .get::<MeshMap>()
-                    .expect("[Artisan] (renderer) failed to get mesh map");
+                    let mesh_map = resources
+                        .get::<MeshMap>()
+                        .expect("[Artisan] (renderer) failed to get mesh map");
 
-                cmd.bind_graphics_pipeline(&p);
+                    cmd.bind_graphics_pipeline(&pipeline);
 
-                // TODO: Viewport
-                cmd.set_viewport(0, viewport.clone());
-                cmd.set_scissor(0, viewport.rect);
+                    // TODO: Viewport
+                    cmd.set_viewport(0, viewport.clone());
+                    cmd.set_scissor(0, viewport.rect);
 
-                cmd.snort_glue(0, &p, &glue_drops[frame_index as usize]);
+                    cmd.snort_glue(0, &pipeline, &glue_drops[frame_index as usize]);
 
-                for (_e, (mesh, mat, transform)) in world
-                    .query::<(&MeshComponent, &MaterialComponent, &Transform)>()
-                    .iter()
-                {
-                    if let MaterialComponent::Solid(ref solid) = mat {
-                        let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
+                    for (_e, (mesh, mat, transform)) in world
+                        .query::<(&MeshComponent, &MaterialComponent, &Transform)>()
+                        .iter()
+                    {
+                        if let MaterialComponent::Solid(ref solid) = mat {
+                            let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
 
-                        let model = transform.into_model();
-                        let vertex_push_data: &[u32] =
-                            bytemuck::cast_slice(bytemuck::bytes_of(&model));
-                        cmd.push_constants(&p, ShaderType::Vertex, 0, vertex_push_data);
+                            let model = transform.into_model();
+                            let vertex_push_data: &[u32] =
+                                bytemuck::cast_slice(bytemuck::bytes_of(&model));
+                            cmd.push_constants(&pipeline, ShaderType::Vertex, 0, vertex_push_data);
 
-                        let fragment_push_data: &[u32] =
-                            bytemuck::cast_slice(bytemuck::bytes_of(solid));
-                        // log::info!("Push Data is: \n{:#?}", push_data);
-                        cmd.push_constants(&p, ShaderType::Fragment, MAT4_SIZE, fragment_push_data);
+                            let fragment_push_data: &[u32] =
+                                bytemuck::cast_slice(bytemuck::bytes_of(solid));
+                            // log::info!("Push Data is: \n{:#?}", push_data);
+                            cmd.push_constants(
+                                &pipeline,
+                                ShaderType::Fragment,
+                                MAT4_SIZE,
+                                fragment_push_data,
+                            );
 
-                        cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
-                        cmd.draw(0..vertex_count, 0..1);
-                    } else {
-                        unimplemented!();
+                            cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
+                            cmd.draw(0..vertex_count, 0..1);
+                        } else {
+                            unimplemented!();
+                        }
                     }
                 }
                 Ok(())

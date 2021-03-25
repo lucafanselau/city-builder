@@ -1,6 +1,7 @@
 #![feature(trait_alias)]
 
 pub mod asset;
+pub mod asset_descendant;
 pub mod asset_server;
 pub mod assets;
 pub mod def;
@@ -13,6 +14,7 @@ pub use def::*;
 pub mod prelude {
     pub use crate::{
         asset::{Asset, AssetChannel},
+        asset_descendant::AssetDescendant,
         asset_server::AssetServer,
         assets::Assets,
         def::BoxedFuture,
@@ -20,6 +22,8 @@ pub mod prelude {
         handle::AssetHandle,
         loader::{AssetLoader, LoadContext},
     };
+    pub use anyhow;
+    pub use thiserror;
 }
 
 #[cfg(test)]

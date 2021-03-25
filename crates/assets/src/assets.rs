@@ -5,6 +5,7 @@ use crate::{
     handle::AssetHandle,
     prelude::AssetEvent,
 };
+use anyhow::anyhow;
 use dashmap::{mapref::one::Ref, DashMap};
 use ecs::prelude::{Events, Res, ResMut};
 use hash_hasher::{HashBuildHasher, HashHasher};
@@ -28,8 +29,14 @@ impl<A: Asset> Assets<A> {
     pub fn query<'a>(
         &'a self,
         handles: &[AssetHandle<A>],
-    ) -> Vec<Ref<'a, AssetHandle<A>, A, Hasher>> {
-        handles.iter().map(|h| self.store.get(h).unwrap()).collect()
+    ) -> anyhow::Result<Vec<Ref<'a, AssetHandle<A>, A, Hasher>>> {
+        let assets: Vec<Ref<AssetHandle<A>, A, BuildHasherDefault<HashHasher>>> =
+            handles.iter().filter_map(|h| self.store.get(h)).collect();
+        if assets.len() == handles.len() {
+            Ok(assets)
+        } else {
+            Err(anyhow!("failed to query all handles"))
+        }
     }
 
     pub fn try_get(&self, handle: &AssetHandle<A>) -> Option<Ref<AssetHandle<A>, A, Hasher>> {

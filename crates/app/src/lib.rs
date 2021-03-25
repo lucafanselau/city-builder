@@ -4,6 +4,7 @@
 pub mod stages;
 pub mod timing;
 
+use assets::asset_server::LoadAssetError;
 pub use ecs::prelude::*;
 use ecs::{resource::Resource, system::MutatingSystem};
 use std::{any::type_name, borrow::Cow};
@@ -115,6 +116,20 @@ impl App {
             stages::UPDATE_EVENTS,
             Events::<T>::update_system.into_system(),
         );
+    }
+
+    pub fn load_asset<A: Asset>(&self, path: impl Into<String>) -> anyhow::Result<AssetHandle<A>> {
+        let server = self.resources.get::<AssetServer>()?;
+        let handle = server.load_asset(path)?;
+        Ok(handle)
+    }
+
+    pub fn add_asset_loader(&self, loader: impl AssetLoader + 'static) {
+        let mut server = self
+            .resources
+            .get_mut::<AssetServer>()
+            .expect("[App] (add_asset_loader) failed to get asser_server");
+        server.add_loader(loader);
     }
 
     pub fn register_asset<A: Asset>(&mut self) {
