@@ -4,7 +4,7 @@
 pub mod stages;
 pub mod timing;
 
-use assets::asset_server::LoadAssetError;
+pub use core;
 pub use ecs::prelude::*;
 use ecs::{resource::Resource, system::MutatingSystem};
 use std::{any::type_name, borrow::Cow};
@@ -118,7 +118,10 @@ impl App {
         );
     }
 
-    pub fn load_asset<A: Asset>(&self, path: impl Into<String>) -> anyhow::Result<AssetHandle<A>> {
+    pub fn load_asset<A: Asset>(
+        &self,
+        path: impl Into<String>,
+    ) -> core::anyhow::Result<AssetHandle<A>> {
         let server = self.resources.get::<AssetServer>()?;
         let handle = server.load_asset(path)?;
         Ok(handle)

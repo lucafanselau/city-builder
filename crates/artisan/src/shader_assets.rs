@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use app::anyhow::{anyhow, Context, Result};
+use app::core::anyhow::{anyhow, Context, Result};
 use app::{App, AssetLoader};
 use render::prelude::{GpuContext, ShaderType};
 

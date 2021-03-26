@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use generational_arena::Index;
 use gfx_hal::{
     device::Device,
     format::{Aspects, Swizzle},
@@ -10,7 +9,6 @@ use gfx_hal::{
 use render::{
     graph::{
         attachment::{AttachmentSize, GraphAttachment},
-        node::Node,
         nodes::pass::{PassAttachment, PassNode},
     },
     prelude::MemoryType,

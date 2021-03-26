@@ -1,5 +1,6 @@
 use crate::compat::ToHalType;
 use crate::context::GfxContext;
+use app::core::anyhow;
 use gfx_hal::pass::Subpass;
 use gfx_hal::pso::{
     AttributeDesc, BakedStates, BasePipeline, BlendDesc, BlendState, ColorBlendDesc, ColorMask,

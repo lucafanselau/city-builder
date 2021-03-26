@@ -1,11 +1,3 @@
-use std::{
-    convert::TryInto,
-    mem::ManuallyDrop,
-    ops::Deref,
-    sync::{atomic::AtomicBool, Arc},
-};
-
-use generational_arena::{Arena, Index};
 use gfx_hal::{
     adapter::Adapter,
     device::Device,
@@ -17,13 +9,15 @@ use gfx_hal::{
 };
 use parking_lot::{Mutex, RwLock};
 use render::{
-    graph::{
-        attachment::GraphAttachment,
-        builder::GraphBuilder,
-        node::{self, Node},
-    },
+    graph::{attachment::GraphAttachment, builder::GraphBuilder, node::Node},
     resource::frame::Extent2D,
     util::format::TextureFormat,
+};
+use std::{
+    convert::TryInto,
+    mem::ManuallyDrop,
+    ops::Deref,
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use crate::{

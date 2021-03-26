@@ -1,7 +1,7 @@
 use crate::UP;
 use app::{App, IntoFunctionSystem, Timing};
 use bytemuck::{Pod, Zeroable};
-use glam::{Vec2, XY};
+use glam::XY;
 use std::{
     cell::{Ref, RefMut},
     ops::Deref,

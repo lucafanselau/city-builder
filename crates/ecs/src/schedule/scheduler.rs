@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::system::{MutatingSystem, System};
 
-use thiserror::Error;
+use core::thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum InsertStageError {

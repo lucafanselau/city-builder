@@ -1,9 +1,9 @@
+use app::core::thiserror::Error;
 use gfx_hal::{device::Device, Backend, MemoryTypeId};
 use std::cmp::Ordering;
 use std::mem::ManuallyDrop;
 use std::ops::Range;
 use std::sync::Arc;
-use thiserror::Error;
 
 #[derive(Debug)]
 pub(crate) struct MemoryPage<B: Backend> {
@@ -66,6 +66,7 @@ impl Ord for Allocation {
 }
 
 #[derive(Debug, Error)]
+
 pub(crate) enum AllocationError {
     #[error("This Memory Page has not enough available coherent storage space")]
     OutOfMemory,

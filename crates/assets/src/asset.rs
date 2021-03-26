@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use async_channel::{unbounded, Receiver, Sender};
 use downcast_rs::{impl_downcast, DowncastSync};
 

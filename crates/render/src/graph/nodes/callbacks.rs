@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use app::{Resources, World};
+use app::{core::anyhow, Resources, World};
 
 use crate::{prelude::GpuContext, resource::pipeline::Viewport};
 

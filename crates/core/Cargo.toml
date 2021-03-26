@@ -8,5 +8,8 @@ edition = "2018"
 
 [dependencies]
 log = "0.4"
-cli-table = "0.4"
 lazy_static= "1.4.0"
+anyhow = "1.0.39"
+thiserror = "1.0.24"
+
+# cli-table = "0.4"

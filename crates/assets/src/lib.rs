@@ -22,8 +22,6 @@ pub mod prelude {
         handle::AssetHandle,
         loader::{AssetLoader, LoadContext},
     };
-    pub use anyhow;
-    pub use thiserror;
 }
 
 #[cfg(test)]

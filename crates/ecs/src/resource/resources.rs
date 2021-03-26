@@ -2,8 +2,8 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
 use crate::resource::{ResourceCreator, ResourceQuery};
+use core::thiserror::Error;
 use std::cell::{Ref, RefCell, RefMut};
-use thiserror::Error;
 
 // Resource type
 pub trait Resource: Any + 'static {}

@@ -1,6 +1,6 @@
+use core::anyhow;
 use std::{
-    borrow::{Borrow, BorrowMut, Cow},
-    convert::TryInto,
+    borrow::Borrow,
     mem::ManuallyDrop,
     ops::Deref,
     sync::{
@@ -10,22 +10,20 @@ use std::{
 };
 
 use app::{Resources, World};
-use generational_arena::Arena;
 use gfx_hal::{
     adapter::Adapter,
     command::{CommandBuffer, CommandBufferFlags, Level},
     device::{Device, WaitFor},
-    format::{ChannelType, Format, ImageFeature},
     image::Extent,
-    pool::{CommandPool, CommandPoolCreateFlags},
-    prelude::{CommandQueue, PhysicalDevice},
+    pool::CommandPool,
+    prelude::CommandQueue,
     queue::Submission,
     window::{PresentMode, PresentationSurface, Surface, SurfaceCapabilities, SwapchainConfig},
     Backend,
 };
 use parking_lot::{Mutex, MutexGuard, RwLock};
 use render::{
-    graph::{attachment::GraphAttachment, node::Node, nodes::callbacks::FrameData, Graph},
+    graph::{nodes::callbacks::FrameData, Graph},
     prelude::CommandEncoder,
     resource::{
         frame::{Clear, Extent2D},

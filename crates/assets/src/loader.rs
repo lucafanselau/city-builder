@@ -25,7 +25,7 @@ pub trait AssetLoader: Send + Sync {
         &'a self,
         bytes: &'a [u8],
         ctx: LoadContext<'a>,
-    ) -> BoxedFuture<'a, anyhow::Result<()>>;
+    ) -> BoxedFuture<'a, core::anyhow::Result<()>>;
     //maybe we'll need something like
     // (async) fn free(&self, ...)
     fn ext(&self) -> &[&str];

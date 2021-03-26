@@ -1,4 +1,4 @@
-use std::{cell::Ref, ops::Deref, path::Path, sync::Arc};
+use std::{cell::Ref, ops::Deref, sync::Arc};
 
 use app::{App, AssetDescendant, IntoMutatingSystem, Resources, Timing, World};
 use bytemuck::{Pod, Zeroable};
@@ -17,8 +17,8 @@ use render::{
     resource::{
         frame::Extent2D,
         pipeline::{
-            DepthDescriptor, GraphicsPipeline, PipelineShaders, PipelineStates, Primitive,
-            Rasterizer, RenderContext as PipelineRenderContext,
+            DepthDescriptor, PipelineShaders, PipelineStates, Primitive, Rasterizer,
+            RenderContext as PipelineRenderContext,
         },
         render_pass::{LoadOp, StoreOp},
     },
@@ -111,12 +111,8 @@ pub fn init(app: &mut App) {
             }
         };
 
-        let light_buffer = SwapBuffer::new(
-            ctx.clone(),
-            "Light Uniform".into(),
-            frames_in_flight,
-            initial_light,
-        );
+        let light_buffer =
+            SwapBuffer::new(ctx, "Light Uniform".into(), frames_in_flight, initial_light);
 
         // Which is the equivalent of a DescriptorSetLayout
         let parts = mixture![
@@ -162,7 +158,7 @@ pub fn init(app: &mut App) {
             let mut builder = graph_builder.build_pass_node("main_pass".into());
             builder.add_output(backbuffer, LoadOp::Clear, StoreOp::Store);
             builder.set_depth(depth_attachment, LoadOp::Clear, StoreOp::DontCare);
-            let resources = resources.clone();
+            let resources = resources;
             builder.init(Box::new(move |render_pass| {
                 let resources = resources.clone();
                 let vertex_shader = vertex_shader.clone();
@@ -252,29 +248,26 @@ pub fn init(app: &mut App) {
                         .query::<(&MeshComponent, &MaterialComponent, &Transform)>()
                         .iter()
                     {
-                        if let MaterialComponent::Solid(ref solid) = mat {
-                            let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
+                        let MaterialComponent::Solid(ref solid) = mat;
+                        let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
 
-                            let model = transform.into_model();
-                            let vertex_push_data: &[u32] =
-                                bytemuck::cast_slice(bytemuck::bytes_of(&model));
-                            cmd.push_constants(&pipeline, ShaderType::Vertex, 0, vertex_push_data);
+                        let model = transform.into_model();
+                        let vertex_push_data: &[u32] =
+                            bytemuck::cast_slice(bytemuck::bytes_of(&model));
+                        cmd.push_constants(&pipeline, ShaderType::Vertex, 0, vertex_push_data);
 
-                            let fragment_push_data: &[u32] =
-                                bytemuck::cast_slice(bytemuck::bytes_of(solid));
-                            // log::info!("Push Data is: \n{:#?}", push_data);
-                            cmd.push_constants(
-                                &pipeline,
-                                ShaderType::Fragment,
-                                MAT4_SIZE,
-                                fragment_push_data,
-                            );
+                        let fragment_push_data: &[u32] =
+                            bytemuck::cast_slice(bytemuck::bytes_of(solid));
+                        // log::info!("Push Data is: \n{:#?}", push_data);
+                        cmd.push_constants(
+                            &pipeline,
+                            ShaderType::Fragment,
+                            MAT4_SIZE,
+                            fragment_push_data,
+                        );
 
-                            cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
-                            cmd.draw(0..vertex_count, 0..1);
-                        } else {
-                            unimplemented!();
-                        }
+                        cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
+                        cmd.draw(0..vertex_count, 0..1);
                     }
                 }
                 Ok(())

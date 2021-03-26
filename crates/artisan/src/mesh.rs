@@ -45,6 +45,13 @@ pub struct Mesh<Context: GpuContext> {
     vertex_count: u32,
 }
 
+impl<Context: GpuContext> Mesh<Context> {
+    /// Get a reference to the mesh's name.
+    pub fn name(&self) -> &Cow<'static, str> {
+        &self.name
+    }
+}
+
 pub struct MeshMap {
     ctx: Arc<ActiveContext>,
     data: HashMap<MeshId, Mesh<ActiveContext>>,

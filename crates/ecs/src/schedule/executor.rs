@@ -1,5 +1,3 @@
-use std::{ops::Deref, time::Instant};
-
 use crate::{resource::Resources, schedule::scheduler::Scheduler};
 use hecs::World;
 

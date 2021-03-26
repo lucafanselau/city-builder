@@ -1,10 +1,7 @@
-use std::{
-    borrow::Cow,
-    cell::{Cell, RefCell},
-};
+use std::{borrow::Cow, cell::RefCell};
 
 use crate::{
-    graph::{builder::GraphBuilder, Graph},
+    graph::builder::GraphBuilder,
     resource::render_pass::{LoadOp, StoreOp},
 };
 

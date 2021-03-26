@@ -2,29 +2,23 @@ use gfx_hal::Backend;
 use render::graph::nodes::pass::PassNode;
 use uuid::Uuid;
 
-use std::{
-    ops::{Deref, Range},
-    sync::Arc,
-};
-
-use generational_arena::{Arena, Index};
 use gfx_hal::{
     device::Device,
     image::Layout,
     pass::{Attachment, AttachmentOps, AttachmentRef, SubpassDependency, SubpassDesc},
 };
 use render::{
-    graph::{attachment::GraphAttachment, node::Node},
+    graph::node::Node,
     resource::render_pass::{LoadOp, StoreOp},
     util::format::TextureFormat,
 };
+use std::{ops::Range, sync::Arc};
 
 use crate::compat::ToHalType;
 
 use super::{
     attachment::{AttachmentIndex, GfxGraphAttachment},
     builder::GfxGraphBuilder,
-    GfxGraph,
 };
 
 //
@@ -45,7 +39,7 @@ pub struct GfxPassNode<B: Backend> {
 pub(super) fn build_node<B: Backend>(
     ctx: &B::Device,
     node: Node<GfxGraphBuilder<B>>,
-    attachments: &Vec<GfxGraphAttachment<B>>,
+    attachments: &[GfxGraphAttachment<B>],
     surface_format: TextureFormat,
 ) -> GfxNode<B> {
     match node {
@@ -56,7 +50,7 @@ pub(super) fn build_node<B: Backend>(
 }
 
 fn build_attachment<B: Backend>(
-    attachments: &Vec<GfxGraphAttachment<B>>,
+    attachments: &[GfxGraphAttachment<B>],
     index: Uuid,
     load: LoadOp,
     store: StoreOp,
@@ -79,8 +73,8 @@ fn build_attachment<B: Backend>(
 
 fn build_pass_node<B: Backend>(
     ctx: &B::Device,
-    mut node: PassNode<GfxGraphBuilder<B>>,
-    graph_attachments: &Vec<GfxGraphAttachment<B>>,
+    node: PassNode<GfxGraphBuilder<B>>,
+    graph_attachments: &[GfxGraphAttachment<B>],
     surface_format: TextureFormat,
 ) -> GfxPassNode<B> {
     // ctx.create_render_pass(attachments, subpasses, dependencies);
