@@ -1,22 +1,23 @@
-use core::anyhow::Result;
+use crate::{
+    asset::{Asset, AssetChannel},
+    assets::Assets,
+    file_spy::FileSpy,
+    handle::{AssetHandle, AssetHandleId, AssetHandleUntyped},
+    loader::{AssetLoader, LoadContext},
+};
+use core::anyhow::{self, Result};
+use core::thiserror::{self, Error};
 use dashmap::{mapref::one::Ref, DashMap};
+use ecs::prelude::Res;
 use std::{
     any::TypeId,
     fs::File,
     io::Read,
     ops::Deref,
-    path::PathBuf,
-    sync::{Arc, RwLock},
+    path::{Path, PathBuf},
+    sync::Arc,
 };
-use tasks::task_pool::TaskPool;
-
-use crate::{
-    asset::{Asset, AssetChannel},
-    assets::Assets,
-    handle::{AssetHandle, AssetHandleUntyped},
-    loader::{AssetLoader, LoadContext},
-};
-use core::thiserror::{self, Error};
+use tasks::{lock::RwLock, task_pool::TaskPool};
 
 #[derive(Debug, Error)]
 pub enum LoadAssetError {
@@ -26,6 +27,8 @@ pub enum LoadAssetError {
     MissingExtension(String),
     #[error("The requested Asset could not be found")]
     NotFound(#[from] std::io::Error),
+    #[error("Error occurred during loading")]
+    LoaderError(#[from] anyhow::Error),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -47,10 +50,9 @@ impl ChannelMap {
 pub struct AssetServer {
     task_pool: TaskPool,
     pub channels: ChannelMap,
-    // NOTE(luca): When the server is cloned, this vec contains the same loaders,
-    // but when the user adds a loader after that, not all instances of the asset
-    // server will be able to find that, not sure though if that is an actual problem
     loaders: Arc<RwLock<Vec<Arc<dyn AssetLoader>>>>,
+    /// the spy
+    file_spy: Arc<FileSpy>,
 }
 
 impl AssetServer {
@@ -59,6 +61,7 @@ impl AssetServer {
             task_pool: pool.deref().clone(),
             channels: Default::default(),
             loaders: Default::default(),
+            file_spy: Default::default(),
         }
     }
 
@@ -68,81 +71,111 @@ impl AssetServer {
         Assets::new(asset_channel)
     }
 
-    pub fn add_loader(&mut self, loader: impl AssetLoader + 'static) {
-        self.loaders
-            .write()
-            .expect("[AssetServer] (add_loader) failed to acquire lock")
-            .push(Arc::new(loader));
+    pub async fn add_loader(&self, loader: impl AssetLoader + 'static) {
+        let mut loaders = self.loaders.write().await;
+        loaders.push(Arc::new(loader));
     }
 
-    pub fn load_asset<A: Asset>(
-        &self,
-        path: impl Into<String>,
-    ) -> Result<AssetHandle<A>, LoadAssetError> {
-        self.load_asset_untyped(path).map(|h| h.typed())
+    pub fn add_loader_sync(&self, loader: impl AssetLoader + 'static) {
+        tasks::futures::future::block_on(self.add_loader(loader));
     }
 
-    pub fn load_asset_untyped(
-        &self,
-        path: impl Into<String>,
-    ) -> Result<AssetHandleUntyped, LoadAssetError> {
-        let _path_buf = {
+    pub fn load_asset<A: Asset>(&self, path: impl AsRef<str>) -> AssetHandle<A> {
+        self.load_asset_untyped(path).typed()
+    }
+
+    pub fn load_asset_untyped(&self, path: impl AsRef<str>) -> AssetHandleUntyped {
+        let path_buf = {
             let mut buf = PathBuf::new(); // from(env!("CARGO_MANIFEST_DIR"));
-            buf.push(path.into());
+            buf.push(path.as_ref());
             buf
         };
 
-        // let handle = AssetHandleUntyped::new(AssetHandleId::from_path(path_buf.as_path()));
+        self.file_spy.watch_asset(path_buf.clone());
 
-        // // First we will try to access the fs metedata (if this fails, the path is invalid or the asset does not exist)
-        // let metadata = std::fs::metadata(path_buf.as_path())?;
-        // // Next we will find the matching loader
-        // let extension = path_buf.as_path().extension().ok_or_else(|| {
-        //     LoadAssetError::MissingExtension(path_buf.as_os_str().to_string_lossy().into())
-        // })?;
-        // let loaders = self.loaders.read().expect();
-        // let loader: &Arc<Box<dyn AssetLoader>> = loaders
-        //     .iter()
-        //     .find(|l| l.ext().contains(&extension.to_str().unwrap()))
-        //     .ok_or_else(|| LoadAssetError::NoLoader {
-        //         ext: extension.to_str().unwrap().into(),
-        //     })?;
-
-        // let task = self.task_pool.spawn(self.clone().load_async(
-        //     path_buf,
-        //     handle.clone(),
-        //     metadata,
-        //     loader.clone(),
-        // ));
-
-        // task.detach();
-
-        // Ok(handle)
-        // TODO: Change it into async (async-lock crate)
-        todo!()
+        self.load_internal(path_buf)
     }
 
-    pub(crate) async fn load_async(
+    fn load_internal(&self, path: impl AsRef<Path> + Send + 'static) -> AssetHandleUntyped {
+        let handle = AssetHandleUntyped::new(AssetHandleId::from_path(path.as_ref()));
+        let server = self.clone();
+        {
+            let handle = handle.clone();
+            let task = self.task_pool.spawn(async move {
+                let path = path.as_ref();
+                if let Err(e) = server.load_async(path, handle).await {
+                    log::error!("[AssetServer] (load_async) failed to load asset {:?}", path);
+                    log::error!("{}", e);
+                }
+            });
+            // AAAAAAAAnd then we don't care about it anymore
+            task.detach();
+        }
+        handle
+    }
+
+    async fn load_async(
         self,
-        path_buf: PathBuf,
+        path: impl AsRef<Path>,
         handle: AssetHandleUntyped,
-        metadata: std::fs::Metadata,
-        loader: Arc<Box<dyn AssetLoader>>,
-    ) {
-        let mut f = File::open(path_buf.clone()).expect("load asset");
+    ) -> Result<(), LoadAssetError> {
+        // Get Fields
+        let Self {
+            loaders, channels, ..
+        } = self;
+
+        let path = path.as_ref();
+        // First we will try to access the fs metedata (if this fails, the path is invalid or the asset does not exist)
+        let metadata = std::fs::metadata(path)?;
+
+        let mut f = File::open(&path)?;
         let mut bytes = vec![0; metadata.len() as usize];
-        f.read_exact(&mut bytes).expect("buffer overflow");
+        f.read_exact(&mut bytes)?;
 
-        let load_context = LoadContext::new(self, path_buf.as_path(), handle);
+        // Next we will find the matching loader
+        let extension = path
+            .extension()
+            .map(|v| v.to_str())
+            .flatten()
+            .ok_or_else(|| LoadAssetError::MissingExtension(format!("{:?}", path)))?;
+        let loaders = loaders.read().await;
+        let loader = loaders
+            .iter()
+            .find(|l| l.ext().contains(&extension))
+            .ok_or_else(|| LoadAssetError::NoLoader {
+                ext: extension.into(),
+            })?;
 
-        if let Err(e) = loader.load(&bytes, load_context).await {
-            log::error!(
-                "[AssetServer] (load_async) failed to load asset {:?}",
-                path_buf.as_path()
-            );
-            log::error!("{}", e);
-            // Although that might be a bit to much 😉
-            panic!();
+        let load_context = LoadContext::new(channels, path, handle);
+        loader.load(&bytes, load_context).await?;
+
+        Ok(())
+    }
+
+    pub fn update_system(server: Res<Self>) {
+        while let Ok(event) = server.file_spy.rx().try_recv() {
+            match event {
+                Ok(event) => {
+                    if let notify::Event {
+                        kind: notify::EventKind::Modify(_),
+                        paths,
+                        ..
+                    } = event
+                    {
+                        for path in paths {
+                            // TODO: factor out
+                            let path = path
+                                .strip_prefix(std::env::current_dir().expect(
+                                    "[AssetServer] (update_system) failed to get working dir",
+                                ))
+                                .expect("[AssetServer] (update_system) Failed to strip prefix")
+                                .to_path_buf();
+                            let _ = server.load_internal(path);
+                        }
+                    }
+                }
+                Err(e) => log::warn!("[AssetServer] (update_system) notify got an error: {}", e),
+            }
         }
     }
 }

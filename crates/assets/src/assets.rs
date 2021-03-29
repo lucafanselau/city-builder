@@ -48,9 +48,9 @@ impl<A: Asset> Assets<A> {
             .expect("[Assets] failed to retrieve asset")
     }
 
-    // TODO: !! Events and Asset Destructuring
+    // TODO: Asset Lifetime
     pub fn update_system(assets: Res<Self>, mut events: ResMut<Events<AssetEvent<A>>>) {
-        while let Some((id, a)) = unsafe { assets.channel.try_receive::<A>() } {
+        while let Some((id, a)) = assets.channel.try_receive::<A>() {
             match assets.store.insert(id.clone(), *a) {
                 Some(_) => events.send(AssetEvent::Updated(id)),
                 None => events.send(AssetEvent::Created(id)),

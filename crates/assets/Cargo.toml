@@ -12,7 +12,6 @@ ecs = { path  = "../ecs" }
 tasks = { path = "../tasks" }
 
 dashmap = "4.0.2"
-async-channel = "1.6.1"
 log = "0.4.14"
 hash_hasher = "2.0.3"
 downcast-rs = "1.2.0"

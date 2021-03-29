@@ -40,6 +40,7 @@ fn init_app(app: &mut App) {
         app.insert_resource(pool.clone());
         // Aaaaand then an asset server
         app.insert_resource(AssetServer::new(pool));
+        app.add_system(stages::UPDATE, AssetServer::update_system.into_system());
     }
 }
 
@@ -120,19 +121,19 @@ impl App {
 
     pub fn load_asset<A: Asset>(
         &self,
-        path: impl Into<String>,
+        path: impl AsRef<str>,
     ) -> core::anyhow::Result<AssetHandle<A>> {
         let server = self.resources.get::<AssetServer>()?;
-        let handle = server.load_asset(path)?;
+        let handle = server.load_asset(path);
         Ok(handle)
     }
 
     pub fn add_asset_loader(&self, loader: impl AssetLoader + 'static) {
-        let mut server = self
+        let server = self
             .resources
             .get_mut::<AssetServer>()
             .expect("[App] (add_asset_loader) failed to get asser_server");
-        server.add_loader(loader);
+        server.add_loader_sync(loader);
     }
 
     pub fn register_asset<A: Asset>(&mut self) {

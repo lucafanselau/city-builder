@@ -20,6 +20,7 @@ use render::resource::glue::Mixture;
 use render::resource::pipeline::{GraphicsPipelineDescriptor, RenderContext, ShaderSource};
 use render::resource::render_pass::RenderPassDescriptor;
 
+use core::anyhow;
 use render::{
     context::GpuBuilder,
     resource::buffer::{BufferDescriptor, BufferUsage},
@@ -178,7 +179,7 @@ impl<B: Backend> GpuContext for GfxContext<B> {
     //     self.swapper.get_surface_format()
     // }
 
-    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode {
+    fn compile_shader(&self, source: ShaderSource) -> anyhow::Result<Self::ShaderCode> {
         self.plumber.compile_shader(source)
     }
 

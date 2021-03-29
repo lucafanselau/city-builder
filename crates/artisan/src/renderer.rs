@@ -133,6 +133,8 @@ pub fn init(app: &mut App) {
             .load_asset("assets/shaders/solid.frag")
             .expect("failed to load solid fragment");
 
+        // log::info!("Vertex shader handle: {:?}", vertex_shader);
+
         let mut glue_drops = Vec::with_capacity(frames_in_flight);
 
         for i in 0..frames_in_flight {
@@ -188,10 +190,10 @@ pub fn init(app: &mut App) {
                             pipeline_states: PipelineStates::DYNAMIC,
                         };
 
-                        resources.create_graphics_pipeline(
+                        Arc::new(resources.create_graphics_pipeline(
                             desc,
                             PipelineRenderContext::RenderPass((render_pass.deref(), 0)),
-                        )
+                        ))
                     },
                     vec![vertex_shader, fragment_shader].as_slice(),
                 );
@@ -269,8 +271,10 @@ pub fn init(app: &mut App) {
                         cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
                         cmd.draw(0..vertex_count, 0..1);
                     }
+                    Ok(Some(Box::new(pipeline.clone())))
+                } else {
+                    Ok(None)
                 }
-                Ok(())
             }));
             graph_builder.add_node(Node::PassNode(builder.build()))
         }

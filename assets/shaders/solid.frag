@@ -39,5 +39,6 @@ void main() {
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess);
     vec3 specular = spec * material.specular;
     
-    out_color = vec4(ambient + diffuse + specular, 1.0);
+    // out_color = vec4(ambient + diffuse + specular, 1.0);
+    out_color = vec4(0.43, 0.33, 0.22, 1.0); PENIS
 }

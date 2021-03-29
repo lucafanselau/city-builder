@@ -1,18 +1,18 @@
 use std::path::Path;
 
-use crate::{asset_server::AssetServer, handle::AssetHandleUntyped, BoxedFuture};
+use crate::{asset_server::ChannelMap, handle::AssetHandleUntyped, BoxedFuture};
 
 /// Context of a load operations
 pub struct LoadContext<'a> {
-    pub server: AssetServer,
+    pub channels: ChannelMap,
     pub path: &'a Path,
     pub handle: AssetHandleUntyped,
 }
 
 impl<'a> LoadContext<'a> {
-    pub fn new(server: AssetServer, path: &'a Path, handle: AssetHandleUntyped) -> Self {
+    pub fn new(channels: ChannelMap, path: &'a Path, handle: AssetHandleUntyped) -> Self {
         Self {
-            server,
+            channels,
             path,
             handle,
         }

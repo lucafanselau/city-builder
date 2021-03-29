@@ -1,6 +1,11 @@
 use std::ops::Deref;
 
+// Some commonly used types to be exported
+pub use async_channel as channel;
+pub use async_lock as lock;
+pub use crossbeam_channel as sync_channel;
 pub use futures_lite as futures;
+pub use parking_lot as sync_lock;
 
 pub mod task;
 pub mod task_pool;

@@ -160,8 +160,8 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
         let mut frames = Vec::with_capacity(frames_in_flight.try_into().unwrap());
         unsafe {
             for _ in 0..frames_in_flight {
-                frames.push(ManuallyDrop::new(Mutex::new(
-                    FrameSynchronization::<B>::create(&data.device),
+                frames.push(ManuallyDrop::new(FrameSynchronization::<B>::create(
+                    &data.device,
                 )));
             }
         }
@@ -198,7 +198,7 @@ impl<B: Backend> GraphBuilder for GfxGraphBuilder<B> {
             data,
             should_configure_swapchain: AtomicBool::new(true),
             current_frame: RwLock::new((0, FrameStatus::Inactive)),
-            frames,
+            frames: Mutex::new(frames),
         }
     }
 

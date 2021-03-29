@@ -6,7 +6,7 @@ use artisan::{components::Transform, prelude::glam};
 mod logger;
 
 fn spawner_plugin(app: &mut app::App) {
-    log::info!("{:?}", TypeId::of::<artisan::mesh::MeshMap>());
+    // log::info!("{:?}", TypeId::of::<artisan::mesh::MeshMap>());
     // Create a sample entity
     let mesh_id = {
         let mut mesh_map = app

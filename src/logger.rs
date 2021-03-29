@@ -6,5 +6,5 @@ pub fn init_logger() {
         // .set_ignore_level(LevelFilter::Info)
         .build();
 
-    TermLogger::init(LevelFilter::Info, config, TerminalMode::Mixed).unwrap()
+    TermLogger::init(LevelFilter::Debug, config, TerminalMode::Mixed).unwrap()
 }

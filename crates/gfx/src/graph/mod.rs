@@ -1,5 +1,6 @@
 use core::anyhow;
 use std::{
+    any::Any,
     borrow::Borrow,
     mem::ManuallyDrop,
     ops::Deref,
@@ -60,6 +61,7 @@ struct FrameSynchronization<B: Backend> {
     submission_fence: B::Fence,
     rendering_complete: B::Semaphore,
     in_use_command: Option<B::CommandBuffer>,
+    pass_data: Vec<Box<dyn Any>>,
 }
 
 impl<B: Backend> FrameSynchronization<B> {
@@ -72,6 +74,7 @@ impl<B: Backend> FrameSynchronization<B> {
                 .create_semaphore()
                 .expect("[Swapper] failed to create simple sync primitive"),
             in_use_command: None,
+            pass_data: Vec::new(),
         }
     }
 }
@@ -102,7 +105,7 @@ pub struct GfxGraph<B: Backend> {
     // Dynamic Render Data
     should_configure_swapchain: AtomicBool,
     current_frame: RwLock<(u32, FrameStatus)>,
-    frames: Vec<ManuallyDrop<Mutex<FrameSynchronization<B>>>>,
+    frames: Mutex<Vec<ManuallyDrop<FrameSynchronization<B>>>>,
 }
 
 type SwapchainImage<B> = <<B as Backend>::Surface as PresentationSurface<B>>::SwapchainImage;
@@ -113,12 +116,17 @@ impl<B: Backend> GfxGraph<B> {
             // First we need to wait for all frames to finish
             let wait_timeout_ns = 1_000_000_000;
             unsafe {
-                let frames: Vec<MutexGuard<FrameSynchronization<B>>> =
-                    self.frames.iter().map(|f| f.lock()).collect();
-                let fences: Vec<&B::Fence> = frames.iter().map(|f| &f.submission_fence).collect();
-                self.data
-                    .device
-                    .wait_for_fences(fences, WaitFor::All, wait_timeout_ns)
+                let mut frames = self.frames.lock();
+                let frame_result = {
+                    let fences: Vec<&B::Fence> =
+                        frames.iter().map(|f| &f.submission_fence).collect();
+                    self.data
+                        .device
+                        .wait_for_fences(fences, WaitFor::All, wait_timeout_ns)
+                };
+                // Reset frame data
+                frames.iter_mut().map(|f| f.pass_data = Vec::new());
+                frame_result
             }?;
 
             {
@@ -171,12 +179,16 @@ impl<B: Backend> GfxGraph<B> {
         unsafe {
             let render_timeout_ns = 1_000_000_000;
 
-            let mut this_frame = self.frames.get(frame_idx as usize).unwrap().lock();
+            let mut frames = self.frames.lock();
+            let this_frame = frames.get_mut(frame_idx as usize).unwrap();
 
             self.data
                 .device
                 .wait_for_fence(&this_frame.submission_fence, render_timeout_ns)?;
             self.data.device.reset_fence(&this_frame.submission_fence)?;
+
+            // And free the frame data
+            this_frame.pass_data = Vec::new();
 
             // Now we also need to delete the command buffer in use
             if this_frame.in_use_command.is_some() {
@@ -320,17 +332,25 @@ impl<B: Backend> Graph for GfxGraph<B> {
                     frame_index: index,
                     viewport: viewport.clone(),
                 };
-                if let Err(e) = node
+                match node
                     .graph_node
                     .callbacks
                     .borrow_mut()
                     .run(frame_data, world, resources)
                 {
-                    panic!(
-                        "[GfxGraph] execution failed during pass node: {}, with error: {}",
-                        node.graph_node.name, e
-                    )
+                    Ok(Some(data)) => {
+                        let mut frames = self.frames.lock();
+                        frames.get_mut(index as usize).unwrap().pass_data.push(data);
+                    }
+                    Ok(None) => (),
+                    Err(e) => {
+                        panic!(
+                            "[GfxGraph] execution failed during pass node: {}, with error: {}",
+                            node.graph_node.name, e
+                        )
+                    }
                 }
+
                 // and end render pass
                 gfx_command.end_render_pass()
             }
@@ -360,7 +380,8 @@ impl<B: Backend> Graph for GfxGraph<B> {
             }
         };
 
-        let mut this_frame = self.frames.get(frame_idx as usize).unwrap().lock();
+        let mut frames = self.frames.lock();
+        let this_frame = frames.get_mut(frame_idx as usize).unwrap();
         let mut graphics_queue = self.data.queues.graphics.lock();
 
         unsafe {

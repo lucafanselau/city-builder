@@ -47,10 +47,9 @@ impl AssetLoader for ShaderLoader {
                     source: content,
                     shader_type,
                     name: Some(name),
-                });
+                })?;
             // And then send the asset
-            ctx.server
-                .channels
+            ctx.channels
                 .get_channel::<ShaderAsset>()
                 .send(ctx.handle.typed(), ShaderAsset(result))
                 .await;

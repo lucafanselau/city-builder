@@ -6,6 +6,7 @@ pub mod asset_server;
 pub mod assets;
 pub mod def;
 pub mod events;
+mod file_spy;
 pub mod handle;
 pub mod loader;
 

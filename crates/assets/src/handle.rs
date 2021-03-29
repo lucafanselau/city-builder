@@ -11,6 +11,12 @@ pub enum AssetHandleId {
     PathId(AssetPathId),
 }
 
+impl From<AssetPathId> for AssetHandleId {
+    fn from(id: AssetPathId) -> Self {
+        Self::PathId(id)
+    }
+}
+
 impl AssetHandleId {
     pub fn from_path(path: &Path) -> Self {
         Self::PathId(path.into())

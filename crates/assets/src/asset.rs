@@ -1,5 +1,5 @@
-use async_channel::{unbounded, Receiver, Sender};
 use downcast_rs::{impl_downcast, DowncastSync};
+use tasks::channel::{unbounded, Receiver, Sender};
 
 use crate::handle::{AssetHandle, AssetHandleUntyped};
 
@@ -30,7 +30,9 @@ impl AssetChannel {
             .expect("AsyncChannel failed to send")
     }
 
-    pub async unsafe fn receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
+    /// Asynchronously receives a value from the channel
+    /// Returns Some if a value was received **and** the conversion to A suceeded, None otherwise
+    pub async fn receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
         self.receiver
             .recv()
             .await
@@ -39,7 +41,7 @@ impl AssetChannel {
             .flatten()
     }
 
-    pub unsafe fn try_receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
+    pub fn try_receive<A: Asset>(&self) -> Option<(AssetHandle<A>, Box<A>)> {
         self.receiver
             .try_recv()
             .ok()

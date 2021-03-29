@@ -14,6 +14,7 @@ use crate::{
     graph::Graph,
     resource::{frame::Extent3D, glue::DescriptorWrite, render_pass::RenderPassDescriptor},
 };
+use app::core::anyhow;
 use bytemuck::Pod;
 use raw_window_handle::HasRawWindowHandle;
 use std::borrow::Borrow;
@@ -87,9 +88,8 @@ pub trait GpuContext: Send + Sync {
         Self: Sized;
     fn drop_pipeline(&self, pipeline: Self::PipelineHandle);
 
-    // NOTE(luca): Maybe this should not be provided by context, or like more sleek, but for now
-    //  this is enough
-    fn compile_shader(&self, source: ShaderSource) -> Self::ShaderCode;
+    // NOTE(luca): Maybe this should not be provided by context
+    fn compile_shader(&self, source: ShaderSource) -> anyhow::Result<Self::ShaderCode>;
 
     // TODO: if we want to support multi surface or headless drawing a surface can not be bound to
     //  the context...

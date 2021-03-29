@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -13,10 +14,12 @@ pub struct FrameData<'a, Context: GpuContext> {
     pub viewport: Viewport,
 }
 
+pub type PassReturn = Option<Box<dyn Any>>;
+
 pub trait InitCallback<Context: GpuContext, U> =
     Fn(Arc<<Context as GpuContext>::RenderPassHandle>) -> Box<U>;
 pub trait PassCallback<Context: GpuContext, U> =
-    FnMut(FrameData<'_, Context>, &mut U, &World, &Resources) -> anyhow::Result<()>;
+    FnMut(FrameData<'_, Context>, &mut U, &World, &Resources) -> anyhow::Result<PassReturn>;
 pub trait UserData = Send + Sync + 'static;
 
 pub trait PassCallbacks<Context: GpuContext> {
@@ -26,7 +29,7 @@ pub trait PassCallbacks<Context: GpuContext> {
         data: FrameData<Context>,
         world: &World,
         resources: &Resources,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<PassReturn>;
 }
 
 pub struct PassCallbacksImpl<Context: GpuContext, U: UserData + ?Sized> {
@@ -58,7 +61,7 @@ impl<Context: GpuContext, U: UserData> PassCallbacks<Context> for PassCallbacksI
         frame_data: FrameData<Context>,
         world: &World,
         resources: &Resources,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PassReturn> {
         let data = self
             .user_data
             .as_mut()

@@ -248,7 +248,7 @@ impl<B: Backend> Plumber<B> {
         fs::read_to_string(path).expect("[Plumber] failed to load shader file")
     }
 
-    pub(crate) fn compile_shader(&self, source: ShaderSource) -> Vec<u32> {
+    pub(crate) fn compile_shader(&self, source: ShaderSource) -> anyhow::Result<Vec<u32>> {
         match source {
             ShaderSource::GlslFile(path) => {
                 let source = Self::load_file(path.clone());
@@ -272,16 +272,13 @@ impl<B: Backend> Plumber<B> {
                 };
 
                 self.compile_glsl(source.as_str(), shader_type, name)
-                    .unwrap()
             }
             ShaderSource::GlslSource {
                 source,
                 shader_type,
                 name,
-            } => self
-                .compile_glsl(source, shader_type, name.unwrap_or("unknown-inline-shader"))
-                .unwrap(),
-            ShaderSource::Spirv(source) => source,
+            } => self.compile_glsl(source, shader_type, name.unwrap_or("unknown-inline-shader")),
+            ShaderSource::Spirv(source) => Ok(source),
         }
     }
 }
