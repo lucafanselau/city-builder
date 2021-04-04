@@ -9,6 +9,7 @@ pub use parking_lot as sync_lock;
 
 pub mod task;
 pub mod task_pool;
+pub mod utilities;
 
 /// Compute pool (intended to use in )
 pub struct ComputePool(task_pool::TaskPool);

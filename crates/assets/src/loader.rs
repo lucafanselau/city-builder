@@ -1,6 +1,12 @@
-use std::path::Path;
+use std::{borrow::Cow, path::Path};
 
-use crate::{asset_server::ChannelMap, handle::AssetHandleUntyped, BoxedFuture};
+use crate::{
+    asset_server::ChannelMap,
+    handle::{AssetHandleUntyped, HandleId},
+    path::AssetPath,
+    prelude::{Asset, AssetHandle},
+    BoxedFuture,
+};
 
 /// Context of a load operations
 pub struct LoadContext<'a> {
@@ -16,6 +22,32 @@ impl<'a> LoadContext<'a> {
             path,
             handle,
         }
+    }
+
+    pub async fn send_asset<A: Asset>(&self, asset: A) {
+        self.channels
+            .get_channel::<A>()
+            .value()
+            .send_untyped(self.handle.clone(), Box::new(asset))
+            .await;
+    }
+
+    pub async fn add_asset_with_label<A: Asset>(
+        &self,
+        label: impl Into<&str>,
+        asset: A,
+    ) -> AssetHandle<A> {
+        let asset_path =
+            AssetPath::new(Cow::Borrowed(self.path), Some(Cow::Borrowed(label.into())));
+        let handle = AssetHandleUntyped::new(HandleId::from_asset_path(asset_path));
+
+        self.channels
+            .get_channel::<A>()
+            .value()
+            .send_untyped(handle.clone(), Box::new(asset))
+            .await;
+
+        handle.typed()
     }
 }
 

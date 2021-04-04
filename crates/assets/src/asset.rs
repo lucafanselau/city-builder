@@ -24,10 +24,14 @@ impl AssetChannel {
     }
 
     pub async fn send_boxed<A: Asset + 'static>(&self, handle: AssetHandle<A>, a: Box<A>) {
+        self.send_untyped(handle.untyped(), a).await
+    }
+
+    pub async fn send_untyped(&self, handle: AssetHandleUntyped, asset: Box<dyn Asset>) {
         self.sender
-            .send((handle.untyped(), a))
+            .send((handle, asset))
             .await
-            .expect("AsyncChannel failed to send")
+            .expect("AssetChannel failed to send")
     }
 
     /// Asynchronously receives a value from the channel

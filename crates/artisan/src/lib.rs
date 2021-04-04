@@ -7,8 +7,8 @@ pub mod components;
 pub mod factory;
 pub mod material;
 pub mod mesh;
-mod renderer;
-mod shader_assets;
+mod pipelines;
+pub mod renderer;
 
 use app::*;
 

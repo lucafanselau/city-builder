@@ -1,5 +1,5 @@
 [package]
-name = "tasks"
+name = "models"
 version = "0.1.0"
 authors = ["Luca Fanselau <luca.fanselau@outlook.com>"]
 edition = "2018"
@@ -7,13 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+artisan = { path = "../artisan" }
+app = { path = "../app" }
 core = { path = "../core" }
+render = { path = "../render" }
+tasks = { path = "../tasks" }
 
-async-executor = "1.4"
-async-channel = "1.6.1"
-crossbeam-channel = "0.5.0"
-parking_lot = "0.11.1"
-async-lock = "2.3.0"
-futures-lite = "1.11.3"
-num_cpus = "1.13.0"
-log = "0.4.14"
+gltf = "0.15.2"
+base64 = "0.13.0"

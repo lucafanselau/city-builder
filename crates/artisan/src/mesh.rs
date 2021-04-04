@@ -1,6 +1,8 @@
+use app::AssetHandle;
 use bytemuck::{Pod, Zeroable};
 use render::{
-    prelude::{BufferUsage, GpuContext, MemoryType},
+    command_encoder::{IndexType, Renderable},
+    prelude::{BufferRange, BufferUsage, CommandEncoder, GpuContext, MemoryType},
     resource::{
         buffer::BufferDescriptor,
         pipeline::{
@@ -8,16 +10,44 @@ use render::{
         },
     },
 };
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
-use uuid::Uuid;
+use std::borrow::Cow;
 
-use crate::renderer::ActiveContext;
+use crate::{
+    material::{Material, SolidMaterial},
+    renderer::ActiveContext,
+};
 
 #[derive(Copy, Clone, Zeroable, Pod)]
 #[repr(C)]
 pub struct Vertex {
     pub pos: glam::Vec3,
     pub normal: glam::Vec3,
+}
+
+pub const VERTEX_SIZE: usize = std::mem::size_of::<Vertex>();
+
+#[derive(Debug, Clone)]
+pub enum Indices {
+    U16(Vec<u16>),
+    U32(Vec<u32>),
+}
+
+impl Indices {
+    pub fn len(&self) -> usize {
+        match self {
+            Indices::U16(slice) => slice.len(),
+            Indices::U32(slice) => slice.len(),
+        }
+    }
+}
+
+impl From<&Indices> for IndexType {
+    fn from(indices: &Indices) -> Self {
+        match indices {
+            Indices::U16(_) => IndexType::U16,
+            Indices::U32(_) => IndexType::U32,
+        }
+    }
 }
 
 impl Vertex {
@@ -37,74 +67,129 @@ impl Vertex {
     }
 }
 
-pub type MeshId = Uuid;
-
-pub struct Mesh<Context: GpuContext> {
-    handle: <Context as GpuContext>::BufferHandle,
-    name: Cow<'static, str>,
-    vertex_count: u32,
+#[derive(Debug)]
+pub struct MeshPart {
+    pub(crate) vertex_buffer: <ActiveContext as GpuContext>::BufferHandle,
+    pub(crate) index_buffer: <ActiveContext as GpuContext>::BufferHandle,
+    pub(crate) index_type: IndexType,
+    pub(crate) indices_count: u32,
+    pub(crate) material: Material,
 }
 
-impl<Context: GpuContext> Mesh<Context> {
-    /// Get a reference to the mesh's name.
-    pub fn name(&self) -> &Cow<'static, str> {
-        &self.name
-    }
-}
-
-pub struct MeshMap {
-    ctx: Arc<ActiveContext>,
-    data: HashMap<MeshId, Mesh<ActiveContext>>,
-}
-
-impl MeshMap {
-    pub fn new(ctx: Arc<ActiveContext>) -> Self {
+impl MeshPart {
+    pub fn new(
+        vertex_buffer: <ActiveContext as GpuContext>::BufferHandle,
+        index_buffer: <ActiveContext as GpuContext>::BufferHandle,
+        index_type: IndexType,
+        indices_count: u32,
+        material: Material,
+    ) -> Self {
         Self {
-            ctx,
-            data: HashMap::new(),
+            vertex_buffer,
+            index_buffer,
+            index_type,
+            indices_count,
+            material,
         }
     }
 
-    pub fn load_mesh<N>(&mut self, name: N, data: Vec<Vertex>) -> MeshId
-    where
-        N: Into<Cow<'static, str>>,
-    {
-        let id = Uuid::new_v4();
-        let name = name.into();
-
-        let vertex_size = std::mem::size_of::<Vertex>();
-
-        let handle = self.ctx.create_buffer(&BufferDescriptor {
-            name: name.clone(),
-            size: (vertex_size * data.len()) as u64,
+    pub fn from_data(
+        name: &str,
+        vertices: &[Vertex],
+        indices: &Indices,
+        material: Material,
+        ctx: &ActiveContext,
+    ) -> Self {
+        // BIG TODO: Abstract that away (see story CPU <-> GPU Dataflow)
+        let vertex_buffer = ctx.create_buffer(&BufferDescriptor {
+            // TODO: Naming
+            name: format!("{}-vertex-buffer", name).into(),
+            size: (VERTEX_SIZE * vertices.len()) as u64,
             // NOTE: should be upgraded to device local memory (but i dont give a s*** right now)
             memory_type: MemoryType::HostVisible,
             usage: BufferUsage::Vertex,
         });
-
+        // Upload vertex data
         unsafe {
-            let buffer: &[u8] = bytemuck::cast_slice(data.as_slice());
-            self.ctx.write_to_buffer_raw(&handle, buffer);
+            let vertex_data: &[u8] = bytemuck::cast_slice(vertices);
+            ctx.write_to_buffer_raw(&vertex_buffer, vertex_data);
         }
 
-        let mesh = Mesh {
-            handle,
-            name,
-            vertex_count: data.len() as _,
-        };
-        self.data.insert(id, mesh);
-        id
+        let index_type: IndexType = indices.into();
+        let indices_count = indices.len();
+        let index_buffer = ctx.create_buffer(&BufferDescriptor {
+            name: format!("{}-index-buffer", name).into(),
+            size: (index_type.get_size() * indices.len()) as u64,
+            memory_type: MemoryType::HostVisible,
+            usage: BufferUsage::Index,
+        });
+        // Upload index data
+        unsafe {
+            let index_data: &[u8] = match indices {
+                Indices::U16(data) => bytemuck::cast_slice(&data),
+                Indices::U32(data) => bytemuck::cast_slice(&data),
+            };
+            ctx.write_to_buffer_raw(&index_buffer, index_data);
+        }
+
+        Self {
+            vertex_buffer,
+            index_buffer,
+            index_type,
+            indices_count: indices_count as _,
+            material,
+        }
+    }
+}
+
+impl Renderable<ActiveContext> for MeshPart {
+    fn render<Encoder: CommandEncoder<ActiveContext>>(&self, encoder: &mut Encoder) {
+        encoder.bind_vertex_buffer(0, &self.vertex_buffer, BufferRange::WHOLE);
+        encoder.bind_index_buffer(
+            &self.index_buffer,
+            BufferRange::WHOLE,
+            self.index_type.clone(),
+        );
+        encoder.draw_indexed(0..self.indices_count, 0, 0..1);
+    }
+}
+
+#[derive(Debug)]
+pub struct Mesh {
+    name: String,
+    pub parts: Vec<MeshPart>,
+}
+
+impl Mesh {
+    pub fn new(name: impl Into<String>, parts: Vec<MeshPart>) -> Self {
+        Self {
+            name: name.into(),
+            parts,
+        }
+    }
+}
+
+// TODO: Drop mesh
+
+#[derive(Debug)]
+pub struct Model {
+    pub meshes: Vec<(glam::Mat4, AssetHandle<Mesh>)>,
+}
+
+impl Model {
+    pub fn new() -> Self {
+        Self {
+            meshes: Default::default(),
+        }
     }
 
-    pub(crate) fn draw_info(
-        &self,
-        id: &MeshId,
-    ) -> (u32, &<ActiveContext as GpuContext>::BufferHandle) {
-        let mesh = self
-            .data
-            .get(id)
-            .expect("[MeshMap] (draw_info) invalid mesh id");
+    pub fn add_mesh(&mut self, transform: glam::Mat4, mesh: AssetHandle<Mesh>) {
+        self.meshes.push((transform, mesh));
+    }
+}
 
-        (mesh.vertex_count, &mesh.handle)
+impl Default for Model {
+    fn default() -> Self {
+        Self::new()
     }
 }

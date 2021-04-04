@@ -4,49 +4,55 @@ use std::{
     path::Path,
 };
 
-use crate::asset::Asset;
+use crate::{asset::Asset, path::AssetPath};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AssetHandleId {
-    PathId(AssetPathId),
+pub enum HandleId {
+    AssetPathId(AssetPathId),
 }
 
-impl From<AssetPathId> for AssetHandleId {
+impl From<AssetPathId> for HandleId {
     fn from(id: AssetPathId) -> Self {
-        Self::PathId(id)
+        Self::AssetPathId(id)
     }
 }
 
-impl AssetHandleId {
+impl HandleId {
+    pub fn from_asset_path(path: AssetPath) -> Self {
+        Self::AssetPathId(path.into())
+    }
+
     pub fn from_path(path: &Path) -> Self {
-        Self::PathId(path.into())
+        Self::AssetPathId(AssetPath::from_path(path).into())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AssetPathId {
     path_id: u64,
+    label_id: u64,
 }
 
-impl From<&Path> for AssetPathId {
-    fn from(path: &Path) -> Self {
+impl<'a> From<AssetPath<'a>> for AssetPathId {
+    fn from(path: AssetPath) -> Self {
         let mut hasher = HASHER.clone();
-        path.hash(&mut hasher);
-        Self {
-            path_id: hasher.finish(),
-        }
+        path.path().hash(&mut hasher);
+        let path_id = hasher.finish();
+        path.label().hash(&mut hasher);
+        let label_id = hasher.finish();
+        Self { path_id, label_id }
     }
 }
 
 impl AssetPathId {
-    pub fn from_path(path: &Path) -> Self {
+    pub fn from_path(path: AssetPath) -> Self {
         Self::from(path)
     }
 }
 
 #[derive(Debug)]
 pub struct AssetHandle<A: Asset> {
-    id: AssetHandleId,
+    id: HandleId,
     _marker: std::marker::PhantomData<A>,
 }
 
@@ -79,11 +85,11 @@ impl<A: Asset> AssetHandle<A> {
 
 #[derive(Debug, Clone)]
 pub struct AssetHandleUntyped {
-    id: AssetHandleId,
+    id: HandleId,
 }
 
 impl AssetHandleUntyped {
-    pub fn new(id: AssetHandleId) -> Self {
+    pub fn new(id: HandleId) -> Self {
         Self { id }
     }
 

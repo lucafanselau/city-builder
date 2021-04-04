@@ -1,5 +1,18 @@
+use std::ops::Deref;
+
+use crate::mesh::Model;
+use app::AssetHandle;
+
 #[derive(Debug, Clone)]
-pub struct MeshComponent(pub crate::mesh::MeshId);
+pub struct ModelComponent(pub AssetHandle<Model>);
+
+impl Deref for ModelComponent {
+    type Target = AssetHandle<Model>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rotation {

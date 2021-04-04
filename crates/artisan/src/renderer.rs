@@ -1,6 +1,6 @@
 use std::{cell::Ref, ops::Deref, sync::Arc};
 
-use app::{App, AssetDescendant, IntoMutatingSystem, Resources, Timing, World};
+use app::{App, AssetDescendant, Assets, IntoMutatingSystem, Resources, Timing, World};
 use bytemuck::{Pod, Zeroable};
 use gfx::context::ContextBuilder as GfxContextBuilder;
 use glam::Vec3A;
@@ -26,10 +26,10 @@ use render::{
 
 use crate::{
     camera::{Camera, CameraBuffer},
-    components::{MeshComponent, Transform},
-    material::{MaterialComponent, SolidMaterial},
-    mesh::{MeshMap, Vertex},
-    shader_assets::ShaderAsset,
+    components::{ModelComponent, Transform},
+    material::{Material, SolidMaterial},
+    mesh::{Mesh, Model, Vertex},
+    pipelines::ShaderAsset,
 };
 
 const LIGHT_POSITION: Vec3A = glam::const_vec3a!([10.0, 10.0, 10.0]);
@@ -78,14 +78,13 @@ pub fn init(app: &mut App) {
     let resources = Arc::new(GpuResources::new(ctx.clone()));
 
     // Initialize shader asset
-    crate::shader_assets::init(app, ctx.clone());
+    crate::pipelines::init(app, ctx.clone());
+    // Add Context as Resource
+    app.insert_resource::<Arc<ActiveContext>>(ctx.clone());
 
-    {
-        // Insert MeshMap
-        app.get_resources()
-            .insert(MeshMap::new(ctx.clone()))
-            .expect("[Artisan] failed to insert mesh map");
-    }
+    // And mesh and model asset
+    app.register_asset::<Mesh>();
+    app.register_asset::<Model>();
 
     {
         let mut graph_builder = ctx.create_graph(surface);
@@ -201,86 +200,95 @@ pub fn init(app: &mut App) {
                 Box::new(pipeline)
             }));
             builder.callback(Box::new(move |frame, pipeline, world, resources| {
-                if let Some(pipeline) = pipeline.get(resources) {
-                    let FrameData {
-                        cmd,
-                        frame_index,
-                        viewport,
-                    } = frame;
+                match pipeline.get(resources) {
+                    Some(pipeline) => {
+                        let FrameData {
+                            cmd,
+                            frame_index,
+                            viewport,
+                        } = frame;
 
-                    {
-                        // Query needed resources
-                        let (camera, timing): (Ref<Camera>, Ref<Timing>) =
-                            resources.query::<(Ref<Camera>, Ref<Timing>)>()?;
-                        // Calculate new camera
-                        let camera_data = {
-                            let aspect_ratio =
-                                viewport.rect.width as f32 / viewport.rect.height as f32;
-                            camera.calc(aspect_ratio)
-                        };
-                        camera_buffer.write(camera_data);
-                        camera_buffer.frame(frame_index);
-                        // Update Light Buffer
-                        let light_position = glam::vec3a(
-                            timing.total_elapsed().sin() * 10.0,
-                            10.0,
-                            timing.total_elapsed().cos() * 10.0,
-                        );
-                        let light_data = Light {
-                            light_position,
-                            view_position: camera.eye.into(),
-                        };
-                        light_buffer.write(light_data);
-                        light_buffer.frame(frame_index);
+                        {
+                            // Query needed resources
+                            let (camera, timing): (Ref<Camera>, Ref<Timing>) =
+                                resources.query::<(Ref<Camera>, Ref<Timing>)>()?;
+                            // Calculate new camera
+                            let camera_data = {
+                                let aspect_ratio =
+                                    viewport.rect.width as f32 / viewport.rect.height as f32;
+                                camera.calc(aspect_ratio)
+                            };
+                            camera_buffer.write(camera_data);
+                            camera_buffer.frame(frame_index);
+                            // Update Light Buffer
+                            let light_position = glam::vec3a(
+                                timing.total_elapsed().sin() * 10.0,
+                                10.0,
+                                timing.total_elapsed().cos() * 10.0,
+                            );
+                            let light_data = Light {
+                                light_position,
+                                view_position: camera.eye.into(),
+                            };
+                            light_buffer.write(light_data);
+                            light_buffer.frame(frame_index);
+                        }
+
+                        cmd.bind_graphics_pipeline(pipeline.as_ref());
+
+                        // TODO: Viewport
+                        cmd.set_viewport(0, viewport.clone());
+                        cmd.set_scissor(0, viewport.rect);
+
+                        cmd.snort_glue(0, &pipeline, &glue_drops[frame_index as usize]);
+
+                        let meshes = resources.get::<Assets<Mesh>>()?;
+                        let models = resources.get::<Assets<Model>>()?;
+
+                        for (_e, (model, transform)) in
+                            world.query::<(&ModelComponent, &Transform)>().iter()
+                        {
+                            let model_matrix = transform.into_model();
+
+                            if let Some(model) = models.try_get(&model) {
+                                for (local_transform, mesh) in model.meshes.iter() {
+                                    if let Some(mesh) = meshes.try_get(&mesh) {
+                                        let model_matrix = model_matrix * *local_transform;
+                                        let vertex_push_data: &[u32] =
+                                            bytemuck::cast_slice(bytemuck::bytes_of(&model_matrix));
+                                        cmd.push_constants(
+                                            &pipeline,
+                                            ShaderType::Vertex,
+                                            0,
+                                            vertex_push_data,
+                                        );
+
+                                        for part in mesh.parts.iter() {
+                                            let Material::Solid(solid) = &part.material;
+                                            let fragment_push_data: &[u32] =
+                                                bytemuck::cast_slice(bytemuck::bytes_of(solid));
+                                            // log::info!("Push Data is: \n{:#?}", push_data);
+                                            cmd.push_constants(
+                                                &pipeline,
+                                                ShaderType::Fragment,
+                                                MAT4_SIZE,
+                                                fragment_push_data,
+                                            );
+
+                                            cmd.render(part);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Ok(Some(Box::new(pipeline.clone())))
                     }
-
-                    let mesh_map = resources
-                        .get::<MeshMap>()
-                        .expect("[Artisan] (renderer) failed to get mesh map");
-
-                    cmd.bind_graphics_pipeline(&pipeline);
-
-                    // TODO: Viewport
-                    cmd.set_viewport(0, viewport.clone());
-                    cmd.set_scissor(0, viewport.rect);
-
-                    cmd.snort_glue(0, &pipeline, &glue_drops[frame_index as usize]);
-
-                    for (_e, (mesh, mat, transform)) in world
-                        .query::<(&MeshComponent, &MaterialComponent, &Transform)>()
-                        .iter()
-                    {
-                        let MaterialComponent::Solid(ref solid) = mat;
-                        let (vertex_count, buffer) = mesh_map.draw_info(&mesh.0);
-
-                        let model = transform.into_model();
-                        let vertex_push_data: &[u32] =
-                            bytemuck::cast_slice(bytemuck::bytes_of(&model));
-                        cmd.push_constants(&pipeline, ShaderType::Vertex, 0, vertex_push_data);
-
-                        let fragment_push_data: &[u32] =
-                            bytemuck::cast_slice(bytemuck::bytes_of(solid));
-                        // log::info!("Push Data is: \n{:#?}", push_data);
-                        cmd.push_constants(
-                            &pipeline,
-                            ShaderType::Fragment,
-                            MAT4_SIZE,
-                            fragment_push_data,
-                        );
-
-                        cmd.bind_vertex_buffer(0, buffer, BufferRange::WHOLE);
-                        cmd.draw(0..vertex_count, 0..1);
-                    }
-                    Ok(Some(Box::new(pipeline.clone())))
-                } else {
-                    Ok(None)
+                    None => Ok(None),
                 }
             }));
             graph_builder.add_node(Node::PassNode(builder.build()))
         }
-        app.get_resources()
-            .insert(graph_builder.build())
-            .expect("[Artisan] failed to insert Renderer State");
+        app.insert_resource(graph_builder.build());
     };
 
     app.add_mut_system(frame_render.into_mut_system());

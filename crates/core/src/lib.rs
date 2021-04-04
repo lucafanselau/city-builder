@@ -7,6 +7,9 @@ use lazy_static::lazy_static;
 pub use anyhow;
 pub use thiserror;
 
+// Reexport log
+pub use log;
+
 // Global Hasher
 lazy_static! {
     pub static ref HASHER: DefaultHasher = DefaultHasher::new();

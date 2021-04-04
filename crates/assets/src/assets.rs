@@ -45,7 +45,7 @@ impl<A: Asset> Assets<A> {
 
     pub fn get(&self, handle: &AssetHandle<A>) -> Ref<AssetHandle<A>, A, Hasher> {
         self.try_get(handle)
-            .expect("[Assets] failed to retrieve asset")
+            .expect("[Assets] failed to retrieve asset, maybe you want to use try_get?")
     }
 
     // TODO: Asset Lifetime

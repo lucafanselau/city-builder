@@ -50,8 +50,8 @@ pub enum BufferUsage {
 }
 
 #[derive(Clone, Debug)]
-pub struct BufferDescriptor {
-    pub name: Cow<'static, str>,
+pub struct BufferDescriptor<'a> {
+    pub name: Cow<'a, str>,
     pub size: u64,
     pub memory_type: MemoryType,
     pub usage: BufferUsage,
@@ -59,13 +59,13 @@ pub struct BufferDescriptor {
 
 #[derive(Debug)]
 pub struct Buffer<Context: GpuContext> {
-    name: Cow<'static, str>,
+    name: String,
     ctx: Arc<Context>,
     handle: ManuallyDrop<Context::BufferHandle>,
 }
 
 impl<Context: GpuContext> Buffer<Context> {
-    pub fn new(name: Cow<'static, str>, handle: Context::BufferHandle, ctx: Arc<Context>) -> Self {
+    pub fn new(name: String, handle: Context::BufferHandle, ctx: Arc<Context>) -> Self {
         Self {
             name,
             ctx,

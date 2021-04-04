@@ -5,9 +5,9 @@ layout (location = 0) in vec3 pass_normal;
 layout (location = 1) in vec3 pass_fragment_position;
 
 layout(push_constant, std430) uniform Material {
-    layout (offset = 64) vec3 ambient;
-    layout (offset = 80) vec3 diffuse;
-    layout (offset = 96) vec3 specular;
+    layout (offset = 64) vec4 ambient;
+    layout (offset = 80) vec4 diffuse;
+    layout (offset = 96) vec4 specular;
     layout (offset = 112) float shininess;
 } material;
 
@@ -20,12 +20,12 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
     // ambient
-    vec3 ambient = 0.1 * material.ambient;
+    vec3 ambient = 0.1 * vec3(material.ambient);
     // diffuse
     vec3 light_dir = normalize(light.light_position - pass_fragment_position);
     vec3 normal = normalize(pass_normal);
     float diff = max(dot(light_dir, normal), 0.0);
-    vec3 diffuse = diff * material.diffuse;
+    vec3 diffuse = diff * vec3(material.diffuse);
     // specular
     // blinn-phong
     // vec3 view_dir = normalize(light.view_position - pass_fragment_position);
@@ -37,8 +37,8 @@ void main() {
     vec3 view_dir = normalize(light.view_position - pass_fragment_position);
     vec3 reflect_dir = reflect(-light_dir, normal);  
     float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material.shininess);
-    vec3 specular = spec * material.specular;
+    vec3 specular = spec * vec3(material.specular);
     
-    // out_color = vec4(ambient + diffuse + specular, 1.0);
-    out_color = vec4(0.43, 0.33, 0.22, 1.0); PENIS
+    out_color = vec4(ambient + diffuse + specular, material.specular.a);
+    // out_color = vec4(0.43, 0.9, 0.8, 1.0);
 }

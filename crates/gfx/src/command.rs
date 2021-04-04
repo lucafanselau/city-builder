@@ -1,12 +1,15 @@
 use bytemuck::__core::ops::Range;
-use render::context::GpuContext;
 use render::resource::buffer::BufferRange;
 use render::resource::frame::Clear;
 use render::resource::pipeline::{Rect, Viewport};
 use render::{command_encoder::CommandEncoder, resource::glue::Glue};
+use render::{command_encoder::IndexType, context::GpuContext};
 
-use gfx_hal::command::{ClearValue, CommandBuffer, SubpassContents};
 use gfx_hal::Backend;
+use gfx_hal::{
+    buffer::IndexBufferView,
+    command::{ClearValue, CommandBuffer, SubpassContents},
+};
 
 use std::iter;
 
@@ -100,6 +103,21 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
         }
     }
 
+    fn bind_index_buffer(
+        &mut self,
+        buffer: &<GfxContext<B> as GpuContext>::BufferHandle,
+        range: BufferRange,
+        index_type: IndexType,
+    ) {
+        unsafe {
+            self.command.bind_index_buffer(IndexBufferView {
+                buffer: &buffer.0,
+                range: range.convert(),
+                index_type: index_type.convert(),
+            })
+        }
+    }
+
     fn snort_glue(
         &mut self,
         set_idx: usize,
@@ -119,6 +137,12 @@ impl<B: Backend> CommandEncoder<GfxContext<B>> for GfxCommand<B> {
     fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
         unsafe {
             self.command.draw(vertices, instances);
+        }
+    }
+
+    fn draw_indexed(&mut self, indices: Range<u32>, vertex_offset: i32, instances: Range<u32>) {
+        unsafe {
+            self.command.draw_indexed(indices, vertex_offset, instances);
         }
     }
 

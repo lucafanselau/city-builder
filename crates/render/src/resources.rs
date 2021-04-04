@@ -23,7 +23,7 @@ impl<Context: GpuContext> GpuResources<Context> {
 
     pub fn create_empty_buffer(&self, desc: BufferDescriptor) -> Buffer<Context> {
         let handle = self.ctx.create_buffer(&desc);
-        Buffer::new(desc.name, handle, self.ctx.clone())
+        Buffer::new(desc.name.into(), handle, self.ctx.clone())
     }
 
     // pub fn create_device_local_buffer<T: Pod>(

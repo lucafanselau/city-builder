@@ -9,6 +9,7 @@ pub mod events;
 mod file_spy;
 pub mod handle;
 pub mod loader;
+pub mod path;
 
 pub use def::*;
 
@@ -27,6 +28,7 @@ pub mod prelude {
 
 #[cfg(test)]
 mod tests {
+    use core::anyhow;
     use std::{cell::RefCell, thread, time::Duration};
 
     use assets::Assets;

@@ -25,7 +25,7 @@ pub struct Camera {
 }
 
 const SENSITIVITY: f32 = 0.6;
-const MOVEMENT_SENSITIVITY: f32 = 0.5;
+const MOVEMENT_SENSITIVITY: f32 = 3.0;
 
 impl Camera {
     pub fn calc(&self, aspect_ratio: f32) -> CameraBuffer {
@@ -101,7 +101,7 @@ fn camera_system(mut camera: RefMut<Camera>, input: Ref<Input>, timing: Ref<Timi
 
 pub(crate) fn init(app: &mut App) {
     app.insert_resource(Camera {
-        eye: glam::vec3(0.0, 0.0, 1.0),
+        eye: glam::vec3(0.0, 0.0, 4.0),
         dir: glam::vec3(0.0, 0.0, -1.0),
         yaw: 0.0,
         pitch: 0.0,

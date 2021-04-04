@@ -15,17 +15,13 @@ use gfx_hal::{
     buffer::SubRange,
     pso::{DescriptorSetLayoutBinding, ShaderStageFlags},
     window::Extent2D as HalExtent2D,
+    IndexType as HalIndexType,
 };
 use gfx_hal::{
     command::{BufferCopy as HalBufferCopy, ClearColor, ClearDepthStencil, ClearValue},
     pso::DescriptorType,
 };
 use gfx_hal::{format::Format, image::Tiling};
-use render::resource::pipeline::{
-    AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage, PolygonMode,
-    Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor, VertexInputRate,
-    Viewport, Winding,
-};
 use render::resource::{
     buffer::BufferCopy,
     render_pass::{
@@ -34,6 +30,14 @@ use render::resource::{
 };
 use render::resource::{buffer::BufferRange, glue::MixturePart, pipeline::ShaderType};
 use render::util::format::{ImageAccess, TextureFormat, TextureLayout};
+use render::{
+    command_encoder::IndexType,
+    resource::pipeline::{
+        AttributeDescriptor, ComparisonFunction, CullFace, DepthDescriptor, PipelineStage,
+        PolygonMode, Primitive, Rasterizer, Rect, VertexAttributeFormat, VertexBufferDescriptor,
+        VertexInputRate, Viewport, Winding,
+    },
+};
 use render::{
     resource::frame::{Clear, Extent2D, Extent3D},
     util::format::ImageTiling,
@@ -498,6 +502,17 @@ impl ToHalType for ImageTiling {
         match self {
             ImageTiling::Linear => Tiling::Linear,
             ImageTiling::Optimal => Tiling::Optimal,
+        }
+    }
+}
+
+impl ToHalType for IndexType {
+    type Target = HalIndexType;
+
+    fn convert(self) -> Self::Target {
+        match self {
+            IndexType::U16 => HalIndexType::U16,
+            IndexType::U32 => HalIndexType::U32,
         }
     }
 }

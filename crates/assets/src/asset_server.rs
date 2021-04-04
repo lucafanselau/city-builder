@@ -2,7 +2,7 @@ use crate::{
     asset::{Asset, AssetChannel},
     assets::Assets,
     file_spy::FileSpy,
-    handle::{AssetHandle, AssetHandleId, AssetHandleUntyped},
+    handle::{AssetHandle, AssetHandleUntyped, HandleId},
     loader::{AssetLoader, LoadContext},
 };
 use core::anyhow::{self, Result};
@@ -27,7 +27,7 @@ pub enum LoadAssetError {
     MissingExtension(String),
     #[error("The requested Asset could not be found")]
     NotFound(#[from] std::io::Error),
-    #[error("Error occurred during loading")]
+    #[error("Loader failed: {}", .0)]
     LoaderError(#[from] anyhow::Error),
 }
 
@@ -97,7 +97,7 @@ impl AssetServer {
     }
 
     fn load_internal(&self, path: impl AsRef<Path> + Send + 'static) -> AssetHandleUntyped {
-        let handle = AssetHandleUntyped::new(AssetHandleId::from_path(path.as_ref()));
+        let handle = AssetHandleUntyped::new(HandleId::from_path(path.as_ref()));
         let server = self.clone();
         {
             let handle = handle.clone();
