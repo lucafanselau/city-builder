@@ -14,11 +14,15 @@ pub struct AssetDescendant<A: Asset, T> {
 impl<A: Asset, T> AssetDescendant<A, T> {
     pub fn new(
         cb: impl Fn(Vec<&A>) -> T + Send + Sync + 'static,
-        handles: &[AssetHandle<A>],
+        handles: Vec<AssetHandle<A>>,
     ) -> Self {
+        assert!(
+            handles.iter().all(|h| h.is_strong()),
+            "[AssetDescendant] (new) expected to receive only strong handles"
+        );
         Self {
             cb: Box::new(cb),
-            handles: handles.to_vec(),
+            handles,
             value: None,
         }
     }

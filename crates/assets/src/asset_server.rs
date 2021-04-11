@@ -1,13 +1,17 @@
 use crate::{
-    asset::{Asset, AssetChannel},
+    asset::Asset,
     assets::Assets,
+    channels::{
+        asset_pipe, AssetPipeReceiver, AssetPipeSender, AssetReceiverMap, AssetSenderMap,
+        RefCounterMap,
+    },
     file_spy::FileSpy,
-    handle::{AssetHandle, AssetHandleUntyped, HandleId},
+    handle::{AssetHandle, AssetHandleUntyped, HandleId, LabelId},
     loader::{AssetLoader, LoadContext},
 };
 use core::anyhow::{self, Result};
 use core::thiserror::{self, Error};
-use dashmap::{mapref::one::Ref, DashMap};
+
 use ecs::prelude::Res;
 use std::{
     any::TypeId,
@@ -17,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tasks::{lock::RwLock, task_pool::TaskPool};
+use tasks::{futures::future, lock::RwLock, task_pool::TaskPool};
 
 #[derive(Debug, Error)]
 pub enum LoadAssetError {
@@ -31,25 +35,14 @@ pub enum LoadAssetError {
     LoaderError(#[from] anyhow::Error),
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ChannelMap(Arc<DashMap<TypeId, AssetChannel>>);
-
-impl ChannelMap {
-    pub fn add_channel<A: Asset>(&self, channel: AssetChannel) {
-        let type_id = std::any::TypeId::of::<A>();
-        self.0.insert(type_id, channel);
-    }
-
-    pub fn get_channel<A: Asset>(&self) -> Ref<TypeId, AssetChannel> {
-        let type_id = std::any::TypeId::of::<A>();
-        self.0.get(&type_id).unwrap()
-    }
-}
-
 #[derive(Clone)]
 pub struct AssetServer {
     task_pool: TaskPool,
-    pub channels: ChannelMap,
+    // Asset Pipes
+    senders: AssetSenderMap,
+    receivers: AssetReceiverMap,
+    // Ref Counter Channels
+    pub(crate) ref_counter: RefCounterMap,
     loaders: Arc<RwLock<Vec<Arc<dyn AssetLoader>>>>,
     /// the spy
     file_spy: Arc<FileSpy>,
@@ -59,16 +52,20 @@ impl AssetServer {
     pub fn new(pool: impl Deref<Target = TaskPool>) -> Self {
         Self {
             task_pool: pool.deref().clone(),
-            channels: Default::default(),
+            senders: Default::default(),
+            receivers: Default::default(),
+            ref_counter: Default::default(),
             loaders: Default::default(),
             file_spy: Default::default(),
         }
     }
 
     pub fn register_asset<A: Asset>(&self) -> Assets<A> {
-        let asset_channel = AssetChannel::new();
-        self.channels.add_channel::<A>(asset_channel.clone());
-        Assets::new(asset_channel)
+        let (tx, rx) = asset_pipe();
+        self.senders.add_pipe::<A>(tx);
+        self.receivers.add_pipe::<A>(rx.clone());
+        self.ref_counter.add_pipe::<A>();
+        Assets::new(rx, self.ref_counter.get_pipe::<A>().unwrap().1.clone())
     }
 
     pub async fn add_loader(&self, loader: impl AssetLoader + 'static) {
@@ -80,11 +77,34 @@ impl AssetServer {
         tasks::futures::future::block_on(self.add_loader(loader));
     }
 
-    pub fn load_asset<A: Asset>(&self, path: impl AsRef<str>) -> AssetHandle<A> {
-        self.load_asset_untyped(path).typed()
+    pub fn add_loaded_asset<A: Asset>(&self, label: impl AsRef<str>, asset: A) -> AssetHandle<A> {
+        let id = HandleId::LabelId(label.into());
+        let ref_pipe = self
+            .ref_counter
+            .get_pipe::<A>()
+            .expect("[AssetServer] (add_loaded_asset) failed to get ref sender");
+        let handle: AssetHandle<A> = AssetHandle::strong(id, ref_pipe.0.clone());
+        future::block_on(self.senders.get_pipe::<A>().send((id, Box::new(asset))))
+            .expect("[AssetServer] (add_loaded_asset) failed to send asset");
+        handle
     }
 
-    pub fn load_asset_untyped(&self, path: impl AsRef<str>) -> AssetHandleUntyped {
+    pub async fn update_asset<A: Asset>(&self, handle: &AssetHandle<A>, asset: A) {
+        self.senders
+            .get_pipe::<A>()
+            .send((handle.id, Box::new(asset)))
+            .await
+            .expect(&format!(
+                "[AssetServer] failed to update asset: {:?}",
+                handle
+            ))
+    }
+
+    pub fn load_asset<A: Asset>(&self, path: impl AsRef<str>) -> AssetHandle<A> {
+        self.load_asset_untyped(path, TypeId::of::<A>()).typed()
+    }
+
+    pub fn load_asset_untyped(&self, path: impl AsRef<str>, type_id: TypeId) -> AssetHandleUntyped {
         let path_buf = {
             let mut buf = PathBuf::new(); // from(env!("CARGO_MANIFEST_DIR"));
             buf.push(path.as_ref());
@@ -93,17 +113,21 @@ impl AssetServer {
 
         self.file_spy.watch_asset(path_buf.clone());
 
-        self.load_internal(path_buf)
+        let id = self.load_internal(path_buf);
+        let ref_pipe = self
+            .ref_counter
+            .get_pipe_from_type(type_id)
+            .expect("[AssetServer] (add_loaded_asset) failed to get ref sender");
+        AssetHandleUntyped::strong(id, ref_pipe.0.clone())
     }
 
-    fn load_internal(&self, path: impl AsRef<Path> + Send + 'static) -> AssetHandleUntyped {
-        let handle = AssetHandleUntyped::new(HandleId::from_path(path.as_ref()));
+    fn load_internal(&self, path: impl AsRef<Path> + Send + 'static) -> HandleId {
+        let id = HandleId::from_path(path.as_ref());
         let server = self.clone();
         {
-            let handle = handle.clone();
             let task = self.task_pool.spawn(async move {
                 let path = path.as_ref();
-                if let Err(e) = server.load_async(path, handle).await {
+                if let Err(e) = server.load_async(path, id).await {
                     log::error!("[AssetServer] (load_async) failed to load asset {:?}", path);
                     log::error!("{}", e);
                 }
@@ -111,17 +135,20 @@ impl AssetServer {
             // AAAAAAAAnd then we don't care about it anymore
             task.detach();
         }
-        handle
+        id
     }
 
     async fn load_async(
         self,
         path: impl AsRef<Path>,
-        handle: AssetHandleUntyped,
+        handle: HandleId,
     ) -> Result<(), LoadAssetError> {
         // Get Fields
         let Self {
-            loaders, channels, ..
+            loaders,
+            senders,
+            ref_counter,
+            ..
         } = self;
 
         let path = path.as_ref();
@@ -146,7 +173,7 @@ impl AssetServer {
                 ext: extension.into(),
             })?;
 
-        let load_context = LoadContext::new(channels, path, handle);
+        let load_context = LoadContext::new(senders, ref_counter, path, handle);
         loader.load(&bytes, load_context).await?;
 
         Ok(())

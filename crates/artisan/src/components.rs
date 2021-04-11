@@ -3,7 +3,7 @@ use std::ops::Deref;
 use crate::mesh::Model;
 use app::AssetHandle;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ModelComponent(pub AssetHandle<Model>);
 
 impl Deref for ModelComponent {

@@ -4,12 +4,13 @@ use app::{AssetHandle, AssetServer, IntoFunctionSystem, QueryBorrow, Timing};
 use artisan::{components::Transform, prelude::glam};
 
 mod logger;
+mod world;
 
 fn spawner_plugin(app: &mut app::App) {
     let model_id = {
         let server = app.get_res::<AssetServer>();
         // Create a sample entity
-        server.load_asset("assets/meshes/firetruck.gltf")
+        server.load_asset("assets/meshes/firetruck.glb")
     };
 
     let _entity = app.get_world_mut().spawn((
@@ -17,13 +18,14 @@ fn spawner_plugin(app: &mut app::App) {
         artisan::components::Transform::UNIT,
     ));
 
-    fn movement_system(timing: Ref<Timing>, mut query: QueryBorrow<&mut Transform>) {
-        let scale = ((timing.total_elapsed().sin() * 0.05) + 1.0) * glam::Vec3::one();
-        for (_e, t) in query.iter() {
-            t.set_scale(scale);
-        }
-    }
-    app.add_system(app::stages::UPDATE, movement_system.into_system());
+    // fn movement_system(timing: Ref<Timing>, mut query: QueryBorrow<&mut Transform>) {
+    //     let scale = ((timing.total_elapsed().sin() * 0.05) + 1.0) * glam::Vec3::one();
+    //     for (_e, t) in query.iter() {
+    //         t.set_scale(scale);
+    //     }
+    // }
+    // app.add_system(app::stages::UPDATE, movement_system.into_system());
+    world::spawn_world(app);
 }
 
 fn main() {

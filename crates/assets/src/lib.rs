@@ -4,6 +4,7 @@ pub mod asset;
 pub mod asset_descendant;
 pub mod asset_server;
 pub mod assets;
+mod channels;
 pub mod def;
 pub mod events;
 mod file_spy;
@@ -15,7 +16,7 @@ pub use def::*;
 
 pub mod prelude {
     pub use crate::{
-        asset::{Asset, AssetChannel},
+        asset::Asset,
         asset_descendant::AssetDescendant,
         asset_server::AssetServer,
         assets::Assets,

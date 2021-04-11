@@ -78,7 +78,7 @@ pub fn init_window(app: &mut App) {
         input::init(app);
     }
 
-    app.set_runner(|mut world, mut resources, mut scheduler| {
+    app.set_runner(|mut resources, mut world, mut scheduler| {
         event_loop.run(move |event, _, control_flow| {
             // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
             // dispatched any events. This is ideal for games and similar applications.

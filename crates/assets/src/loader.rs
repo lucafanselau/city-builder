@@ -1,7 +1,7 @@
 use std::{borrow::Cow, path::Path};
 
 use crate::{
-    asset_server::ChannelMap,
+    channels::{AssetSenderMap, RefCounterMap},
     handle::{AssetHandleUntyped, HandleId},
     path::AssetPath,
     prelude::{Asset, AssetHandle},
@@ -10,25 +10,32 @@ use crate::{
 
 /// Context of a load operations
 pub struct LoadContext<'a> {
-    pub channels: ChannelMap,
+    pub senders: AssetSenderMap,
+    pub ref_map: RefCounterMap,
     pub path: &'a Path,
-    pub handle: AssetHandleUntyped,
+    pub handle: HandleId,
 }
 
 impl<'a> LoadContext<'a> {
-    pub fn new(channels: ChannelMap, path: &'a Path, handle: AssetHandleUntyped) -> Self {
+    pub fn new(
+        senders: AssetSenderMap,
+        ref_map: RefCounterMap,
+        path: &'a Path,
+        handle: HandleId,
+    ) -> Self {
         Self {
-            channels,
+            senders,
+            ref_map,
             path,
             handle,
         }
     }
 
     pub async fn send_asset<A: Asset>(&self, asset: A) {
-        self.channels
-            .get_channel::<A>()
+        self.senders
+            .get_pipe::<A>()
             .value()
-            .send_untyped(self.handle.clone(), Box::new(asset))
+            .send((self.handle, Box::new(asset)))
             .await;
     }
 
@@ -39,15 +46,21 @@ impl<'a> LoadContext<'a> {
     ) -> AssetHandle<A> {
         let asset_path =
             AssetPath::new(Cow::Borrowed(self.path), Some(Cow::Borrowed(label.into())));
-        let handle = AssetHandleUntyped::new(HandleId::from_asset_path(asset_path));
 
-        self.channels
-            .get_channel::<A>()
+        let id = HandleId::from_asset_path(asset_path);
+
+        self.senders
+            .get_pipe::<A>()
             .value()
-            .send_untyped(handle.clone(), Box::new(asset))
+            .send((id, Box::new(asset)))
             .await;
 
-        handle.typed()
+        let ref_pipe = self
+            .ref_map
+            .get_pipe::<A>()
+            .expect("[LoadContext] (add_asset_with_label) failed to get ref_sender");
+
+        AssetHandle::strong(id, ref_pipe.0.clone())
     }
 }
 

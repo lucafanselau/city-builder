@@ -18,7 +18,7 @@ layout (location = 1) out vec3 pass_fragment_position;
 void main() {
     // Pass to fragment shader
     pass_fragment_position = in_pos;
-    pass_normal = in_normal;
+    pass_normal = mat3(transpose(inverse(push_constants.model))) * in_normal;
     // Calculate output position
     gl_Position = camera.view_projection * push_constants.model * vec4(in_pos, 1.0);
 }

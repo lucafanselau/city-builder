@@ -13,11 +13,11 @@ pub use timing::Timing;
 
 pub use assets::prelude::*;
 
-type Runner = Option<Box<dyn FnOnce(World, Resources, Scheduler)>>;
+type Runner = Option<Box<dyn FnOnce(Resources, World, Scheduler)>>;
 
 pub struct App {
-    world: World,
     resources: Resources,
+    world: World,
     scheduler: Scheduler,
     plugins: Vec<Box<dyn FnOnce(&mut Self)>>,
     runner: Runner,
@@ -56,8 +56,8 @@ impl App {
             vec![Box::new(init_app), Box::new(timing::init)];
 
         Self {
-            world: World::new(),
             resources: Resources::new(),
+            world: World::new(),
             scheduler,
             // Add default plugins
             plugins: default_plugins,
@@ -159,7 +159,7 @@ impl App {
 
     pub fn set_runner<Func>(&mut self, runner: Func)
     where
-        Func: 'static + FnOnce(World, Resources, Scheduler),
+        Func: 'static + FnOnce(Resources, World, Scheduler),
     {
         self.runner = Some(Box::new(runner));
     }
@@ -178,6 +178,6 @@ impl App {
         };
 
         // Run the App
-        runner(self.world, self.resources, self.scheduler);
+        runner(self.resources, self.world, self.scheduler);
     }
 }

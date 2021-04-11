@@ -162,8 +162,8 @@ pub fn init(app: &mut App) {
             let resources = resources;
             builder.init(Box::new(move |render_pass| {
                 let resources = resources.clone();
-                let vertex_shader = vertex_shader.clone();
-                let fragment_shader = fragment_shader.clone();
+                let vertex_shader = vertex_shader.clone_strong().unwrap();
+                let fragment_shader = fragment_shader.clone_strong().unwrap();
                 let mixture = mixture.clone();
                 let pipeline = AssetDescendant::<ShaderAsset, _>::new(
                     move |assets| {
@@ -194,7 +194,7 @@ pub fn init(app: &mut App) {
                             PipelineRenderContext::RenderPass((render_pass.deref(), 0)),
                         ))
                     },
-                    vec![vertex_shader, fragment_shader].as_slice(),
+                    vec![vertex_shader, fragment_shader],
                 );
 
                 Box::new(pipeline)
@@ -221,11 +221,9 @@ pub fn init(app: &mut App) {
                             camera_buffer.write(camera_data);
                             camera_buffer.frame(frame_index);
                             // Update Light Buffer
-                            let light_position = glam::vec3a(
-                                timing.total_elapsed().sin() * 10.0,
-                                10.0,
-                                timing.total_elapsed().cos() * 10.0,
-                            );
+                            let angle = timing.total_elapsed() * 0.1;
+                            let light_position =
+                                glam::vec3a(angle.sin() * 700.0, 1500.0, angle.cos() * 700.0);
                             let light_data = Light {
                                 light_position,
                                 view_position: camera.eye.into(),

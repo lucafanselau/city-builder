@@ -1,10 +1,11 @@
 use crate::prelude::{Asset, AssetHandle};
 
-#[derive(Debug, Clone)]
+/// An Asset Event, containing a weak handle to an asset
+#[derive(Debug)]
 pub enum AssetEvent<A: Asset> {
     Created(AssetHandle<A>),
     Updated(AssetHandle<A>),
-    // TODO: Destroyed,
+    Destroyed(AssetHandle<A>),
 }
 
 impl<A: Asset> AssetEvent<A> {
@@ -12,6 +13,7 @@ impl<A: Asset> AssetEvent<A> {
         match self {
             AssetEvent::Created(handle) => handle,
             AssetEvent::Updated(handle) => handle,
+            AssetEvent::Destroyed(handle) => handle,
         }
     }
 
@@ -23,5 +25,10 @@ impl<A: Asset> AssetEvent<A> {
     /// Returns `true` if the asset_event is [`Created`].
     pub fn is_created(&self) -> bool {
         matches!(self, Self::Created(..))
+    }
+
+    /// Returns `true` if the asset_event is [`Destroyed`].
+    pub fn is_destroyed(&self) -> bool {
+        matches!(self, Self::Destroyed(..))
     }
 }

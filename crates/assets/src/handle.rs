@@ -1,14 +1,21 @@
 use core::HASHER;
 use std::{
+    fmt::Debug,
     hash::{Hash, Hasher},
     path::Path,
 };
 
-use crate::{asset::Asset, path::AssetPath};
+use crate::{
+    asset::Asset,
+    channels::{RefEvent, RefSender},
+    path::AssetPath,
+    prelude::AssetServer,
+};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum HandleId {
     AssetPathId(AssetPathId),
+    LabelId(LabelId),
 }
 
 impl From<AssetPathId> for HandleId {
@@ -27,7 +34,7 @@ impl HandleId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct AssetPathId {
     path_id: u64,
     label_id: u64,
@@ -50,21 +57,45 @@ impl AssetPathId {
     }
 }
 
-#[derive(Debug)]
-pub struct AssetHandle<A: Asset> {
-    id: HandleId,
-    _marker: std::marker::PhantomData<A>,
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub struct LabelId(u64);
 
-// region: manual eq, partial_eq and hash implementations for AssetHandle
-impl<A: Asset> Clone for AssetHandle<A> {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id.clone(),
-            _marker: Default::default(),
-        }
+impl<'a, T: AsRef<str>> From<T> for LabelId {
+    fn from(label: T) -> Self {
+        let mut hasher = HASHER.clone();
+        label.as_ref().hash(&mut hasher);
+        Self(hasher.finish())
     }
 }
+
+impl LabelId {
+    pub fn from_label<T: AsRef<str>>(label: T) -> Self {
+        Self::from(label)
+    }
+}
+
+#[derive(Debug)]
+pub enum HandleType {
+    Strong(RefSender),
+    Weak,
+}
+
+pub struct AssetHandle<A: Asset> {
+    pub(crate) id: HandleId,
+    pub(crate) handle_type: HandleType,
+    pub(crate) _marker: std::marker::PhantomData<A>,
+}
+
+/// region: manual eq, partial_eq and hash implementations for AssetHandle
+impl<A: Asset> Debug for AssetHandle<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssetHandle")
+            .field("id", &self.id)
+            .field("handle_type", &self.handle_type)
+            .finish()
+    }
+}
+
 impl<A: Asset> PartialEq for AssetHandle<A> {
     fn eq(&self, other: &Self) -> bool {
         self.id.eq(&other.id)
@@ -78,25 +109,133 @@ impl<A: Asset> Hash for AssetHandle<A> {
 }
 
 impl<A: Asset> AssetHandle<A> {
-    pub fn untyped(self) -> AssetHandleUntyped {
-        AssetHandleUntyped { id: self.id }
+    pub fn weak(id: HandleId) -> Self {
+        Self {
+            id,
+            handle_type: HandleType::Weak,
+            _marker: Default::default(),
+        }
+    }
+
+    pub fn strong(id: HandleId, sender: RefSender) -> Self {
+        sender
+            .try_send(RefEvent::Increase { id })
+            .expect("[AssetHandle] (strong) failed to send increase");
+        Self {
+            id,
+            handle_type: HandleType::Strong(sender),
+            _marker: Default::default(),
+        }
+    }
+
+    pub fn is_strong(&self) -> bool {
+        matches!(self.handle_type, HandleType::Strong(_))
+    }
+
+    pub fn is_weak(&self) -> bool {
+        matches!(self.handle_type, HandleType::Weak)
+    }
+
+    pub fn make_strong(&mut self, server: &AssetServer) {
+        if !self.is_strong() {
+            let ref_pipe = server
+                .ref_counter
+                .get_pipe::<A>()
+                .expect("[AssetHandle] (make_strong) failed to get sender");
+            let sender = ref_pipe.0.clone();
+            sender.try_send(RefEvent::Increase { id: self.id });
+            self.handle_type = HandleType::Strong(sender);
+        }
+    }
+
+    pub fn as_weak(&self) -> AssetHandle<A> {
+        AssetHandle {
+            id: self.id,
+            handle_type: HandleType::Weak,
+            _marker: Default::default(),
+        }
+    }
+
+    /// Clones a strong handle
+    ///
+    /// Returns None if the Handle is not strong
+    pub fn clone_strong(&self) -> Option<Self> {
+        match &self.handle_type {
+            HandleType::Strong(sender) => {
+                let sender = sender.clone();
+                sender
+                    .try_send(RefEvent::Increase { id: self.id })
+                    .expect("[AssetHandle] (clone_strong) failed to send ref event");
+                Some(Self {
+                    id: self.id,
+                    handle_type: HandleType::Strong(sender),
+                    _marker: Default::default(),
+                })
+            }
+            HandleType::Weak => None,
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+impl<A: Asset> Drop for AssetHandle<A> {
+    fn drop(&mut self) {
+        if let HandleType::Strong(sender) = &self.handle_type {
+            let _ = sender.try_send(RefEvent::Decrease { id: self.id });
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct AssetHandleUntyped {
-    id: HandleId,
+    pub(crate) id: HandleId,
+    pub(crate) handle_type: HandleType,
 }
 
 impl AssetHandleUntyped {
-    pub fn new(id: HandleId) -> Self {
-        Self { id }
+    pub fn weak(id: HandleId) -> Self {
+        Self {
+            id,
+            handle_type: HandleType::Weak,
+        }
+    }
+
+    pub fn strong(id: HandleId, sender: RefSender) -> Self {
+        sender
+            .try_send(RefEvent::Increase { id })
+            .expect("[AssetHandle] (strong) failed to send increase");
+        Self {
+            id,
+            handle_type: HandleType::Strong(sender),
+        }
+    }
+
+    pub fn is_strong(&self) -> bool {
+        matches!(self.handle_type, HandleType::Strong(_))
+    }
+
+    pub fn is_weak(&self) -> bool {
+        matches!(self.handle_type, HandleType::Weak)
     }
 
     pub fn typed<A: Asset>(self) -> AssetHandle<A> {
-        AssetHandle {
-            id: self.id,
-            _marker: Default::default(),
+        match &self.handle_type {
+            HandleType::Strong(sender) => {
+                // first we will need to send an increase event, so that the drop function of self will not destroy the asset
+                sender
+                    .try_send(RefEvent::Increase { id: self.id })
+                    .expect("[AssetHandleUntyped] (typed) failed to send ref event");
+
+                AssetHandle::strong(self.id, sender.clone())
+            }
+            HandleType::Weak => AssetHandle::weak(self.id),
+        }
+    }
+}
+
+impl Drop for AssetHandleUntyped {
+    fn drop(&mut self) {
+        if let HandleType::Strong(sender) = &self.handle_type {
+            let _ = sender.try_send(RefEvent::Decrease { id: self.id });
         }
     }
 }

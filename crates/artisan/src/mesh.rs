@@ -70,30 +70,58 @@ impl Vertex {
 #[derive(Debug)]
 pub struct MeshPart {
     pub(crate) vertex_buffer: <ActiveContext as GpuContext>::BufferHandle,
-    pub(crate) index_buffer: <ActiveContext as GpuContext>::BufferHandle,
-    pub(crate) index_type: IndexType,
-    pub(crate) indices_count: u32,
+    pub(crate) index_buffer: Option<(<ActiveContext as GpuContext>::BufferHandle, IndexType)>,
+    pub(crate) draw_count: u32,
     pub(crate) material: Material,
 }
 
 impl MeshPart {
     pub fn new(
         vertex_buffer: <ActiveContext as GpuContext>::BufferHandle,
-        index_buffer: <ActiveContext as GpuContext>::BufferHandle,
-        index_type: IndexType,
-        indices_count: u32,
+        index_buffer: Option<(<ActiveContext as GpuContext>::BufferHandle, IndexType)>,
+        draw_count: u32,
         material: Material,
     ) -> Self {
         Self {
             vertex_buffer,
             index_buffer,
-            index_type,
-            indices_count,
+            draw_count,
             material,
         }
     }
 
     pub fn from_data(
+        name: impl AsRef<str>,
+        vertices: &[Vertex],
+        material: Material,
+        ctx: &ActiveContext,
+    ) -> Self {
+        // BIG TODO: Abstract that away (see story CPU <-> GPU Dataflow)
+        let vertex_buffer = ctx.create_buffer(&BufferDescriptor {
+            // TODO: Naming
+            name: format!("{}-vertex-buffer", name.as_ref()).into(),
+            size: (VERTEX_SIZE * vertices.len()) as u64,
+            // NOTE: should be upgraded to device local memory (but i dont give a s*** right now)
+            memory_type: MemoryType::HostVisible,
+            usage: BufferUsage::Vertex,
+        });
+        // Upload vertex data
+        unsafe {
+            let vertex_data: &[u8] = bytemuck::cast_slice(vertices);
+            ctx.write_to_buffer_raw(&vertex_buffer, vertex_data);
+        }
+
+        let draw_count = vertices.len();
+
+        Self {
+            vertex_buffer,
+            index_buffer: None,
+            draw_count: draw_count as _,
+            material,
+        }
+    }
+
+    pub fn from_data_with_indices(
         name: &str,
         vertices: &[Vertex],
         indices: &Indices,
@@ -116,7 +144,7 @@ impl MeshPart {
         }
 
         let index_type: IndexType = indices.into();
-        let indices_count = indices.len();
+        let draw_count = indices.len();
         let index_buffer = ctx.create_buffer(&BufferDescriptor {
             name: format!("{}-index-buffer", name).into(),
             size: (index_type.get_size() * indices.len()) as u64,
@@ -134,9 +162,8 @@ impl MeshPart {
 
         Self {
             vertex_buffer,
-            index_buffer,
-            index_type,
-            indices_count: indices_count as _,
+            index_buffer: Some((index_buffer, index_type)),
+            draw_count: draw_count as _,
             material,
         }
     }
@@ -145,12 +172,12 @@ impl MeshPart {
 impl Renderable<ActiveContext> for MeshPart {
     fn render<Encoder: CommandEncoder<ActiveContext>>(&self, encoder: &mut Encoder) {
         encoder.bind_vertex_buffer(0, &self.vertex_buffer, BufferRange::WHOLE);
-        encoder.bind_index_buffer(
-            &self.index_buffer,
-            BufferRange::WHOLE,
-            self.index_type.clone(),
-        );
-        encoder.draw_indexed(0..self.indices_count, 0, 0..1);
+        if let Some((index_buffer, index_type)) = &self.index_buffer {
+            encoder.bind_index_buffer(index_buffer, BufferRange::WHOLE, index_type.clone());
+            encoder.draw_indexed(0..self.draw_count, 0, 0..1);
+        } else {
+            encoder.draw(0..self.draw_count, 0..1);
+        }
     }
 }
 

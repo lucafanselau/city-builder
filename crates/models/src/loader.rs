@@ -1,23 +1,14 @@
-use core::{
-    anyhow::{bail, Context, Result},
-    log,
-};
+use core::anyhow::{bail, Context, Result};
 use std::sync::Arc;
 
 use app::{AssetHandle, AssetLoader, LoadContext};
 use artisan::{
-    material::{Material, SolidMaterial},
+    material::Material,
     mesh::{Indices, Mesh, MeshPart, Model, Vertex},
     prelude::glam,
     renderer::ActiveContext,
 };
-use gltf::{mesh::util::ReadIndices, Gltf, Semantic};
-use render::{
-    context::GpuContext,
-    prelude::{BufferUsage, MemoryType},
-    resource::buffer::BufferDescriptor,
-};
-use tasks::futures;
+use gltf::{mesh::util::ReadIndices, Gltf};
 
 // fn load_node(
 //     node: gltf::Node,
@@ -95,7 +86,7 @@ async fn load_meshes<'a>(
                     Material::solid(color * 0.2, color, color, 0.1)
                 };
 
-                let part = MeshPart::from_data(
+                let part = MeshPart::from_data_with_indices(
                     &format!("{}-primitive-{}", mesh_name, i),
                     &vertices,
                     &indices,
@@ -162,7 +153,7 @@ fn load_model(doc: &Gltf, meshes: &[AssetHandle<Mesh>]) -> Result<Model> {
         let transform = transform.unwrap_or_else(glam::Mat4::identity) * node_transform;
 
         if let Some(mesh) = node.mesh() {
-            let mesh_handle = meshes[mesh.index()].clone();
+            let mesh_handle = meshes[mesh.index()].clone_strong().unwrap();
             model.add_mesh(transform, mesh_handle);
         }
 
@@ -204,6 +195,6 @@ impl AssetLoader for GltfLoader {
     }
 
     fn ext(&self) -> &[&str] {
-        &["gltf"]
+        &["gltf", "glb"]
     }
 }

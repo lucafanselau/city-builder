@@ -44,4 +44,37 @@ impl Material {
             shininess,
         })
     }
+
+    pub fn from_color(color: Color) -> Self {
+        color.into()
+    }
+}
+
+impl From<Color> for Material {
+    fn from(color: Color) -> Self {
+        Self::Solid(SolidMaterial {
+            ambient: glam::vec4(0.05, 0.05, 0.05, 1.0),
+            diffuse: color.0,
+            specular: glam::vec4(0.2, 0.2, 0.2, 1.0),
+            shininess: 1.0,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Color(glam::Vec4);
+
+impl Color {
+    pub fn new(color: glam::Vec4) -> Self {
+        Self(color)
+    }
+
+    pub fn from_rgba(r: u8, g: u8, b: u8, a: f32) -> Self {
+        Self(glam::vec4(
+            r as f32 / 255.0,
+            g as f32 / 255.0,
+            b as f32 / 255.0,
+            a,
+        ))
+    }
 }

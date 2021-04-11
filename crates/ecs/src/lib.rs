@@ -2,6 +2,7 @@
 // if there are drawbacks, we might need to remove that
 #![feature(trait_alias)]
 
+pub mod commands;
 pub mod event;
 pub mod resource;
 pub mod schedule;

@@ -10,4 +10,4 @@ edition = "2018"
 core = { path = "../core" }
 
 log = "0.4.11"
-hecs = "0.2.15"
+hecs = "0.5.1"
