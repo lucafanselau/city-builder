@@ -76,3 +76,5 @@ impl_query_tuple!((Ra, Rb));
 impl_query_tuple!((Ra, Rb, Rc));
 impl_query_tuple!((Ra, Rb, Rc, Rd));
 impl_query_tuple!((Ra, Rb, Rc, Rd, Re));
+impl_query_tuple!((Ra, Rb, Rc, Rd, Re, Rf));
+impl_query_tuple!((Ra, Rb, Rc, Rd, Re, Rf, Rg));

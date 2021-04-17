@@ -32,10 +32,6 @@ pub fn circle(r: f32, resolution: u32) -> Vec<Vertex> {
 }
 
 pub fn unit_cube() -> Vec<Vertex> {
-    log::info!(
-        "[1, 2, 3] * [17, 23, 5] = {}",
-        glam::vec3(1.0, 2.0, 3.0) * glam::vec3(17.0, 23.0, 5.0)
-    );
     cube(glam::vec3(1f32, 1f32, 1f32))
 }
 
@@ -79,4 +75,39 @@ pub fn cube(scale: glam::Vec3) -> Vec<Vertex> {
     calc_from_norm(glam::vec3(0.0, -1.0, 0.0), glam::vec3(1.0, 0.0, 0.0));
 
     vertices
+}
+
+pub fn cube_at(scale: glam::Vec3, at: glam::Vec3) -> Vec<Vertex> {
+    let matrix = glam::Mat4::from_translation(at);
+    cube(scale)
+        .into_iter()
+        .map(|v| Vertex {
+            pos: matrix.transform_point3(v.pos),
+            normal: v.normal,
+        })
+        .collect()
+}
+
+/// Function to calculate a beam between from and to
+/// width defaults to 0.1 if equal to None
+pub fn beam(from: glam::Vec3, to: glam::Vec3, width: Option<f32>) -> Vec<Vertex> {
+    let width = width.unwrap_or(0.1);
+    let dir = to - from;
+    let vertices = cube(glam::vec3(width, dir.length(), width));
+    // now we have the vertices of an upward standing box that already has the correct length and centered at (0, 0, 0)
+    // we will need to apply two transformations, first we will rotate the beam and then translate the vertices to the mid point between from and to
+    let rotation_axis = UP.cross(dir).normalize();
+    let angle = dir.angle_between(UP);
+    let matrix = glam::Mat4::from_rotation_translation(
+        glam::Quat::from_axis_angle(rotation_axis, angle),
+        from + 0.5 * dir,
+    );
+    let normal_matrix: glam::Mat3 = matrix.inverse().transpose().into();
+    vertices
+        .into_iter()
+        .map(|v| Vertex {
+            pos: matrix.transform_point3(v.pos),
+            normal: normal_matrix * v.normal,
+        })
+        .collect()
 }

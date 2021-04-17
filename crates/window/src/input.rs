@@ -29,9 +29,10 @@ fn input_system(
     keys: Ref<Events<KeyboardInput>>,
 ) {
     // Only use the last of the cursor events
-    if let Some(CursorMoved(latest_cursor)) = cursor_moved.iter().last() {
-        input.mouse_delta = input.mouse_pos - *latest_cursor;
-        input.mouse_pos = *latest_cursor;
+    if let Some(CursorMoved { absolute, .. }) = cursor_moved.iter().last() {
+        // log::info!("{}", relative);
+        input.mouse_delta = input.mouse_pos - *absolute;
+        input.mouse_pos = *absolute;
     } else {
         input.mouse_delta = glam::Vec2::zero()
     }

@@ -18,3 +18,4 @@ app = { path = "crates/app" }
 artisan = { path = "crates/artisan" }
 models = { path = "crates/models" }
 window = { path = "crates/window" }
+tasks = { path = "crates/tasks" }

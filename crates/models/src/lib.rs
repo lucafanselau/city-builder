@@ -1,5 +1,6 @@
 #![feature(str_split_once)]
 
+mod factory;
 mod loader;
 
 use app::{App, AssetServer};

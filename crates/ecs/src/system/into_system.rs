@@ -46,6 +46,8 @@ macro_rules! impl_into_systems {
         impl_into_system!((Ra, Rb, Rc), (,));
         impl_into_system!((Ra, Rb, Rc, Rd), (,));
         impl_into_system!((Ra, Rb, Rc, Rd, Re), (,));
+        impl_into_system!((Ra, Rb, Rc, Rd, Re, Rf), (,));
+        impl_into_system!((Ra, Rb, Rc, Rd, Re, Rf, Rg), (,));
     };
     ($($Q:ident),*) => {
         impl_into_system!((), ($($Q,)*));
@@ -54,6 +56,8 @@ macro_rules! impl_into_systems {
         impl_into_system!((Ra, Rb, Rc), ($($Q,)*));
         impl_into_system!((Ra, Rb, Rc, Rd), ($($Q,)*));
         impl_into_system!((Ra, Rb, Rc, Rd, Re), ($($Q,)*));
+        impl_into_system!((Ra, Rb, Rc, Rd, Re, Rf), ($($Q,)*));
+        impl_into_system!((Ra, Rb, Rc, Rd, Re, Rf, Rg), ($($Q,)*));
     };
 }
 

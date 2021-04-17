@@ -89,8 +89,18 @@ pub fn init_window(app: &mut App) {
                     // log::info!("{:#?}", event);
                     match event {
                         WindowEvent::CursorMoved { position, .. } => {
-                            let position = glam::vec2(position.x as _, position.y as _);
-                            dispatch_event(&mut resources, events::CursorMoved(position));
+                            let absolute = glam::vec2(position.x as _, position.y as _);
+                            let relative = {
+                                let window = resources.get::<WindowState>().unwrap();
+                                glam::vec2(
+                                    absolute.x / window.size.width as f32,
+                                    absolute.y / window.size.height as f32,
+                                )
+                            };
+                            dispatch_event(
+                                &mut resources,
+                                events::CursorMoved { absolute, relative },
+                            );
                         }
                         WindowEvent::KeyboardInput {
                             input:
@@ -115,6 +125,9 @@ pub fn init_window(app: &mut App) {
                         WindowEvent::Resized(size) => {
                             log::info!("Resized: {:?}", size);
                             dispatch_event(&mut resources, events::WindowResize(size));
+                            if let Ok(mut window) = resources.get_mut::<WindowState>() {
+                                window.size = size;
+                            }
                         }
                         _ => (),
                     }

@@ -1,0 +1,11 @@
+Pipeline(
+    name: "Solid",
+    interface: {
+        "vertex": [
+            Buffer(BufferBinding(binding: 0, name: "camera_buffer", size: 16))
+        ],
+        "fragment": [
+            Sampler(SamplerBinding(binding: 1, name: "texture"))
+        ]
+    }
+)

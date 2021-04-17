@@ -92,7 +92,7 @@ pub fn init(app: &mut App) {
 
         let initial_camera = {
             let camera = app.get_res::<Camera>();
-            camera.calc(initial_aspect_ratio)
+            camera.to_buffer(initial_aspect_ratio)
         };
 
         let camera_buffer = SwapBuffer::new(
@@ -216,7 +216,7 @@ pub fn init(app: &mut App) {
                             let camera_data = {
                                 let aspect_ratio =
                                     viewport.rect.width as f32 / viewport.rect.height as f32;
-                                camera.calc(aspect_ratio)
+                                camera.to_buffer(aspect_ratio)
                             };
                             camera_buffer.write(camera_data);
                             camera_buffer.frame(frame_index);
