@@ -34,7 +34,7 @@ fn input_system(
         input.mouse_delta = input.mouse_pos - *absolute;
         input.mouse_pos = *absolute;
     } else {
-        input.mouse_delta = glam::Vec2::zero()
+        input.mouse_delta = glam::Vec2::ZERO;
     }
 
     for KeyboardInput { key, state } in keys.iter() {

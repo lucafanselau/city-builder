@@ -24,7 +24,7 @@ pub struct Camera {
     pitch: f32,
 }
 
-const SENSITIVITY: f32 = 0.6;
+const SENSITIVITY: f32 = 30.0;
 const MOVEMENT_SENSITIVITY: f32 = 3.0;
 
 impl Camera {
@@ -70,9 +70,15 @@ fn camera_system(mut camera: RefMut<Camera>, input: Ref<Input>, timing: Ref<Timi
     {
         // log::info!("{:?}", input.mouse_delta);
         // Update Yaw and pitch
-        let XY { x, y } = input.mouse_delta.deref();
-        camera.yaw -= x * SENSITIVITY;
-        camera.pitch += y * SENSITIVITY;
+        if input.is_pressed(VirtualKeyCode::Q) {
+            camera.yaw += SENSITIVITY * timing.dt;
+        }
+        if input.is_pressed(VirtualKeyCode::E) {
+            camera.yaw -= SENSITIVITY * timing.dt;
+        }
+        // let XY { x, y } = input.mouse_delta.deref();
+        // camera.yaw -= x * SENSITIVITY;
+        // camera.pitch += y * SENSITIVITY;
 
         let pitch = camera.pitch.to_radians();
         let yaw = camera.yaw.to_radians();
